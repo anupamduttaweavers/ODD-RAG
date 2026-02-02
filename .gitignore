@@ -88,3 +88,6 @@ Thumbs.db
 
 # Alembic
 alembic/versions/*.pyc
+
+# Ignore the vectorstore_index folder
+vectorstore_index/
