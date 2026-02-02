@@ -1,0 +1,65 @@
+"""Application configuration settings."""
+
+from pathlib import Path
+from typing import List, Set
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Base directory of the project
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+
+
+class Settings(BaseSettings):
+    """Application settings loaded from environment variables."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+    )
+
+    # Data Folder
+    BASE_DATA_FOLDER: Path = BASE_DIR / "Data"
+    
+    # Vector Store
+    VECTORSTORE_PATH: Path = BASE_DIR / "vectorstore_index"
+
+    # File Upload
+    ALLOWED_EXTENSIONS: Set[str] = {".txt", ".pdf"}
+
+    # Application
+    APP_NAME: str = "Semantic Document Discovery"
+    APP_VERSION: str = "1.0.0"
+    DEBUG: bool = False
+
+    # Server
+    HOST: str = "0.0.0.0"
+    PORT: int = 8000
+
+    # Database
+    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/app_db"
+
+    # Security
+    SECRET_KEY: str = "your-super-secret-key-change-this-in-production"
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+
+    # CORS
+    ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8080"]
+
+    # Models
+    LLM_MODEL_NAME: str = "llama3.1:8b"
+    LLM_BASE_URL: str = "http://192.168.0.157:8080"
+    EMBEDDING_MODEL: str = "nomic-embed-text:latest"
+    DINMS: int = 768
+
+    # Hash Registry Database (file-based SQLite)
+    HASH_REGISTRY_DB_URL: str = "sqlite:///./hash_registry.db"
+
+    @property
+    def database_url_sync(self) -> str:
+        """Return synchronous database URL for Alembic migrations."""
+        return self.DATABASE_URL.replace("+asyncpg", "")
+
+
+settings = Settings()
