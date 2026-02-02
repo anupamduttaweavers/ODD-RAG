@@ -578,7 +578,7 @@ async def sync_data_folder_changes(base_folder: Path) -> dict:
         }
     """
     from app.utils.document_converstion import process_file
-    from app.vectorstore.operations import add_documents, delete_documents_by_file_path
+    from app.vectorstore.operations import add_documents, delete_documents_by_file_path, delete_documents_by_file_name
     
     results = {
         "new_files_added": 0,
@@ -683,7 +683,9 @@ async def sync_data_folder_changes(base_folder: Path) -> dict:
                 remove_hash(record.content_hash)
                 
                 results["deleted_files_removed"] += 1
-                
+                if chunks_deleted == 0:
+                    chunks_deleted = delete_documents_by_file_name(registered_path.split('/')[-1])
+                    results["chunks_removed"] += chunks_deleted
             except Exception as e:
                 results["errors"].append({
                     "file": record.file_name,

@@ -1,6 +1,7 @@
 # This file contains all the operations related to vector store management.
 from app.vectorstore.vectorstore import vector_store
 from langchain_core.documents import Document
+from app.core.logging import logger
 
 
 async def add_documents(documents: list[Document]):
@@ -83,7 +84,7 @@ def delete_documents_by_file_name(file_name: str) -> int:
                     ids_to_delete.append(doc_id)
         except Exception:
             continue
-    
+    # logger.info(f"IDs to delete for file_name '{file_name}': {ids_to_delete}")
     # Delete the documents
     if ids_to_delete:
         try:
@@ -152,7 +153,7 @@ def delete_documents_by_file_path(file_path: str) -> int:
                     ids_to_delete.append(doc_id)
         except Exception:
             continue
-    
+    # logger.info(f"IDs to delete for file_path '{file_path}': {ids_to_delete}")
     # Delete the documents
     if ids_to_delete:
         try:
