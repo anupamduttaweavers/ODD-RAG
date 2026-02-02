@@ -91,3 +91,6 @@ alembic/versions/*.pyc
 
 # Ignore the vectorstore_index folder
 vectorstore_index/
+
+# Ignore the Data folder
+Data/
