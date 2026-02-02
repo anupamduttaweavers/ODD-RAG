@@ -34,27 +34,27 @@ def sync_data_folder_changes_task(self):
         loop.close()
         
         # Log results
-        print(f"[SYNC TASK] ✅ Sync completed!")
-        print(f"[SYNC TASK]    New files added: {results['new_files_added']}")
-        print(f"[SYNC TASK]    Duplicates skipped: {results['new_files_skipped_duplicate']}")
-        print(f"[SYNC TASK]    Deleted files removed: {results['deleted_files_removed']}")
-        print(f"[SYNC TASK]    Chunks added: {results['chunks_added']}")
-        print(f"[SYNC TASK]    Chunks removed: {results['chunks_removed']}")
+        print("[SYNC TASK] Sync completed!")
+        print(f"[SYNC TASK] New files added: {results['new_files_added']}")
+        print(f"[SYNC TASK] Duplicates skipped: {results['new_files_skipped_duplicate']}")
+        print(f"[SYNC TASK] Deleted files removed: {results['deleted_files_removed']}")
+        print(f"[SYNC TASK] Chunks added: {results['chunks_added']}")
+        print(f"[SYNC TASK] Chunks removed: {results['chunks_removed']}")
         
         if results['errors']:
-            print(f"[SYNC TASK] ⚠️  Errors: {len(results['errors'])}")
+            print(f"[SYNC TASK] Errors: {len(results['errors'])}")
             for error in results['errors']:
                 print(f"[SYNC TASK]    - {error}")
         
         # Save vectorstore if changes were made
         if results['chunks_added'] > 0 or results['chunks_removed'] > 0:
             save_vectorstore(vector_store)
-            print("[SYNC TASK] 💾 Vectorstore saved.")
+            print("[SYNC TASK] Vectorstore saved.")
         
         print("=" * 60)
         return results
         
     except Exception as e:
-        print(f"[SYNC TASK] ❌ Error: {str(e)}")
+        print(f"[SYNC TASK] Error: {str(e)}")
         print("=" * 60)
         raise self.retry(exc=e, countdown=60, max_retries=3)

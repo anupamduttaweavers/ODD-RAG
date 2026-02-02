@@ -94,13 +94,13 @@ def create_application() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # Log incoming requests to identify health check source
-    @application.middleware("http")
-    async def log_requests(request, call_next):
-        if request.url.path == "/health":
-            logger.info(f"Health check from {request.client.host}:{request.client.port} ua='{request.headers.get('user-agent', 'N/A')}'")
-        response = await call_next(request)
-        return response
+    # # Log incoming requests to identify health check source
+    # @application.middleware("http")
+    # async def log_requests(request, call_next):
+    #     if request.url.path == "/health":
+    #         logger.info(f"Health check from {request.client.host}:{request.client.port} ua='{request.headers.get('user-agent', 'N/A')}'")
+    #     response = await call_next(request)
+    #     return response
 
     # Include API router
     application.include_router(api_router, prefix="/api/v1")
