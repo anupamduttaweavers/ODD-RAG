@@ -74,6 +74,7 @@ dmypy.json
 # Database
 *.db
 *.sqlite3
+hash_registry.db
 
 # Logs
 *.log
