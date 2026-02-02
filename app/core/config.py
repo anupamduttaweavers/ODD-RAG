@@ -16,6 +16,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=True,
+        extra="ignore",  # Ignore extra environment variables not defined in Settings
     )
 
     # Data Folder
@@ -36,9 +37,6 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = 8000
 
-    # Database
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/app_db"
-
     # Security
     SECRET_KEY: str = "your-super-secret-key-change-this-in-production"
     ALGORITHM: str = "HS256"
@@ -56,10 +54,10 @@ class Settings(BaseSettings):
     # Hash Registry Database (file-based SQLite)
     HASH_REGISTRY_DB_URL: str = "sqlite:///./hash_registry.db"
 
-    @property
-    def database_url_sync(self) -> str:
-        """Return synchronous database URL for Alembic migrations."""
-        return self.DATABASE_URL.replace("+asyncpg", "")
+    # Celery settings
+    CELERY_BROKER_URL: str = "redis://localhost:6379/0"
+    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/0"
+    CELERY_SYNC_INTERVAL_MINUTES: int = 2
 
 
 settings = Settings()

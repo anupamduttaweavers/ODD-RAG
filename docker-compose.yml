@@ -1,41 +1,80 @@
 version: '3.8'
 
 services:
+  # Redis broker
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # FastAPI application
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: fastapi-app
+    build: .
+    container_name: api
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/app_db
-      - SECRET_KEY=your-secret-key-change-in-production
-      - DEBUG=true
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
     depends_on:
-      db:
+      redis:
         condition: service_healthy
     volumes:
       - .:/app
     restart: unless-stopped
 
-  db:
-    image: postgres:15-alpine
-    container_name: postgres-db
+  # Celery Worker
+  celery-worker:
+    build: .
+    container_name: celery-worker
+    command: celery -A app.core.celery_app worker --loglevel=INFO -E
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=app_db
-    ports:
-      - "5432:5432"
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+      - .:/app
     restart: unless-stopped
 
-volumes:
-  postgres_data:
+  # Celery Beat Scheduler
+  celery-beat:
+    build: .
+    container_name: celery-beat
+    command: celery -A app.core.celery_app beat --loglevel=INFO
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    restart: unless-stopped
+
+  # Flower Monitoring
+  flower:
+    build: .
+    container_name: flower
+    command: celery -A app.core.celery_app flower --port=5555
+    ports:
+      - "5555:5555"
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+      celery-worker:
+        condition: service_started
+    volumes:
+      - .:/app
+    restart: unless-stopped

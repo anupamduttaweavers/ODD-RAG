@@ -1,19 +1,19 @@
-.PHONY: help install dev run test lint format clean docker-build docker-up docker-down migrate
+.PHONY: help install dev run test lint format clean docker-build docker-up docker-down migrate celery-worker celery-beat run-all
 
 # Default target
 help:
 	@echo "Available commands:"
-	@echo "  make install      - Install production dependencies"
-	@echo "  make dev          - Install development dependencies"
-	@echo "  make run          - Run the FastAPI server locally"
-	@echo "  make test         - Run tests with coverage"
-	@echo "  make lint         - Run linting checks"
-	@echo "  make format       - Format code with black and isort"
-	@echo "  make clean        - Clean up cache files"
-	@echo "  make docker-build - Build Docker image"
-	@echo "  make docker-up    - Start Docker containers"
-	@echo "  make docker-down  - Stop Docker containers"
-	@echo "  make migrate      - Run database migrations"
+	@echo "  make install       - Install production dependencies"
+	@echo "  make dev           - Install development dependencies"
+	@echo "  make run           - Run the FastAPI server locally"
+	@echo "  make test          - Run tests with coverage"
+	@echo "  make docker-up     - Start all Docker containers"
+	@echo "  make docker-down   - Stop Docker containers"
+	@echo "  make logs          - View ALL container logs"
+	@echo "  make logs-api      - View FastAPI logs"
+	@echo "  make logs-worker   - View Celery worker logs"
+	@echo "  make logs-beat     - View Celery beat logs"
+	@echo "  make flower        - Open Flower dashboard URL"
 
 # Install production dependencies
 install:
@@ -63,13 +63,22 @@ docker-up:
 docker-down:
 	docker-compose down
 
-docker-logs:
+# View ALL logs
+logs:
 	docker-compose logs -f
 
-# Database migrations
-migrate:
-	alembic upgrade head
+# View FastAPI logs
+logs-api:
+	docker logs api -f
 
-migrate-create:
-	@read -p "Enter migration message: " msg; \
-	alembic revision --autogenerate -m "$$msg"
+# View Celery worker logs
+logs-worker:
+	docker logs celery-worker -f
+
+# View Celery beat logs
+logs-beat:
+	docker logs celery-beat -f
+
+# Flower dashboard
+flower:
+	@echo "Flower Dashboard: http://localhost:5555"

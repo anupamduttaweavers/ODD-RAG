@@ -6,13 +6,9 @@ uvicorn[standard]
 pydantic
 pydantic-settings
 
-# Database
+# Database (SQLite via SQLAlchemy)
 sqlalchemy
 sqlmodel
-alembic
-
-# Async database driver (PostgreSQL)
-asyncpg
 
 # HTTP client
 httpx
@@ -46,3 +42,8 @@ langchain-community
 faiss-cpu
 pypdf
 langchain-text-splitters
+
+# Celery for background tasks
+celery[redis]
+redis
+flower
