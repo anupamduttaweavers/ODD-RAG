@@ -49,7 +49,7 @@ def save_vectorstore(vs: FAISS = None) -> None:
     try:
         settings.VECTORSTORE_PATH.parent.mkdir(parents=True, exist_ok=True)
         vs.save_local(str(settings.VECTORSTORE_PATH))
-        logger.info("Vector store saved.")
+        logger.info(f"Vector store saved.with {vs.index.ntotal} chunks.")
     except Exception as e:
         logger.error(f"Failed to save vector store: {e}")
 

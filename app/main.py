@@ -14,6 +14,7 @@ from app.core.logging import logger
 from app.core.scheduler import start_scheduler, stop_scheduler
 from app.utils.hash_registry import sync_all_folders, load_all_files_to_vectorstore
 from app.vectorstore.vectorstore import save_vectorstore, vector_store
+from app.vectorstore.operations import get_total_docs_count
 
 
 @asynccontextmanager
@@ -82,7 +83,7 @@ async def lifespan(app: FastAPI):
     
     logger.info("Saving vector store to disk...")
     save_vectorstore(vector_store)
-    logger.info("Vector store saved. Goodbye!")
+    # logger.info(f"Vector store saved.Total docs in vector store: {get_total_docs_count()}")
 
 
 def create_application() -> FastAPI:

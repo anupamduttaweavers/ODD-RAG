@@ -23,7 +23,6 @@ async def sync_data_folder_changes_job():
     """
     from app.utils.hash_registry import sync_data_folder_changes
     
-    logger.info("=" * 60)
     logger.info("[SYNC JOB] Starting sync_data_folder_changes...")
     logger.info(f"[SYNC JOB] Scanning folder: {settings.BASE_DATA_FOLDER}")
     
@@ -35,12 +34,12 @@ async def sync_data_folder_changes_job():
         results = await sync_data_folder_changes(settings.BASE_DATA_FOLDER)
         
         # Log results
-        logger.info("[SYNC JOB] Sync completed!")
-        logger.info(f"[SYNC JOB] New files added: {results['new_files_added']}")
-        logger.info(f"[SYNC JOB] Duplicates skipped: {results['new_files_skipped_duplicate']}")
-        logger.info(f"[SYNC JOB] Deleted files removed: {results['deleted_files_removed']}")
-        logger.info(f"[SYNC JOB] Chunks added: {results['chunks_added']}")
-        logger.info(f"[SYNC JOB] Chunks removed: {results['chunks_removed']}")
+        logger.info(f"[SYNC JOB] Sync completed!\nNew files added: {results['new_files_added']}\nDuplicates skipped: {results['new_files_skipped_duplicate']}\nDeleted files removed: {results['deleted_files_removed']}\nChunks added: {results['chunks_added']}\nChunks removed: {results['chunks_removed']}")
+        # logger.info(f"[SYNC JOB] New files added: {results['new_files_added']}")
+        # logger.info(f"[SYNC JOB] Duplicates skipped: {results['new_files_skipped_duplicate']}")
+        # logger.info(f"[SYNC JOB] Deleted files removed: {results['deleted_files_removed']}")
+        # logger.info(f"[SYNC JOB] Chunks added: {results['chunks_added']}")
+        # logger.info(f"[SYNC JOB] Chunks removed: {results['chunks_removed']}")
         
         if results['errors']:
             logger.warning(f"[SYNC JOB] Errors: {len(results['errors'])}")
@@ -50,14 +49,13 @@ async def sync_data_folder_changes_job():
         # Save vectorstore if changes were made
         if results['chunks_added'] > 0 or results['chunks_removed'] > 0:
             save_vectorstore(vector_store)
-            logger.info("[SYNC JOB] Vectorstore saved.")
-        
-        logger.info("=" * 60)
+            logger.info(f"[SYNC JOB] Vectorstore saved with {vector_store.index.ntotal} chunks.")
+        logger.info("="*10)
         return results
         
     except Exception as e:
         logger.error(f"[SYNC JOB] Error during sync: {str(e)}", exc_info=True)
-        logger.info("=" * 60)
+        logger.info("="*10)
         raise
 
 
