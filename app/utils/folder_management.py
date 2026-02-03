@@ -70,3 +70,16 @@ def delete_file(file_name: str,folder_name: str):
         return False, "File does not exist"
     except Exception:
         return False, "Error occurred during deletion"
+    
+def list_all_files_in_base_folder() -> List[str]:
+    """List all files in the base data folder across all subfolders."""
+    data_folder = get_base_data_folder()
+    all_files = []
+    for root, dirs, files in os.walk(data_folder):
+        for file in files:
+            # check if the file is pdf and txt only
+            if not file.endswith(tuple(settings.ALLOWED_EXTENSIONS)):
+                continue
+            relative_path = os.path.relpath(os.path.join(root, file), data_folder)
+            all_files.append(relative_path)
+    return all_files

@@ -239,3 +239,25 @@ async def delete_file_endpoint(file_name: str):
 
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@router.get("/all_files_in_base_folder/")
+async def list_all_files_in_base_folder():
+    """
+    List all files in the base data folder across all subfolders.
+
+    Returns:
+        List of file paths
+    """
+    from app.utils.folder_management import list_all_files_in_base_folder,get_base_data_folder
+
+    try:
+        files = list_all_files_in_base_folder()
+        base_folder = get_base_data_folder()
+        return {
+            "base_folder": str(base_folder),
+            "count": len(files),
+            "files": [str(f) for f in files],
+        }
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})

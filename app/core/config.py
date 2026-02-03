@@ -54,10 +54,8 @@ class Settings(BaseSettings):
     # Hash Registry Database (file-based SQLite)
     HASH_REGISTRY_DB_URL: str = "sqlite:///./hash_registry.db"
 
-    # Celery settings
-    CELERY_BROKER_URL: str = "redis://localhost:6379/0"
-    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/0"
-    CELERY_SYNC_INTERVAL_MINUTES: int = 2
+    # Task Scheduler
+    SYNC_INTERVAL_SECONDS: int = 120  # 2 minutes
 
 
 settings = Settings()

@@ -562,6 +562,7 @@ async def sync_data_folder_changes(base_folder: Path) -> dict:
        - Remove chunks from vectorstore
     
     Use this to protect against manual file additions/deletions without using API endpoints.
+    Recursively scans all subdirectories in the base folder for files with allowed extensions.
     
     Args:
         base_folder: Base data folder path (e.g., settings.BASE_DATA_FOLDER)
@@ -577,6 +578,7 @@ async def sync_data_folder_changes(base_folder: Path) -> dict:
             "errors": []
         }
     """
+    import os
     from app.utils.document_converstion import process_file
     from app.vectorstore.operations import add_documents, delete_documents_by_file_path, delete_documents_by_file_name
     
@@ -597,24 +599,20 @@ async def sync_data_folder_changes(base_folder: Path) -> dict:
     registered_paths = {record.file_path: record for record in all_registered}
     registered_hashes = {record.content_hash: record for record in all_registered}
     
-    # Step 2: Scan all files currently in Data folder
+    # Step 2: Scan all files currently in Data folder (recursively)
     current_files = set()
     
-    for folder_path in base_folder.iterdir():
-        if not folder_path.is_dir():
-            continue
-        
-        folder_name = folder_path.name
-        
-        for file_path in folder_path.iterdir():
-            if not file_path.is_file():
+    for root, dirs, files in os.walk(base_folder):
+        for file in files:
+            if not file.endswith(tuple(['.pdf', '.txt'])):
                 continue
             
-            if file_path.suffix.lower() not in ('.pdf', '.txt'):
-                continue
-            
+            file_path = Path(root) / file
             file_path_str = str(file_path)
             current_files.add(file_path_str)
+            
+            # Get folder name from the path structure
+            folder_name = Path(root).name
             
             # Check if file is already registered by path
             if file_path_str in registered_paths:

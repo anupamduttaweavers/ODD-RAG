@@ -43,7 +43,5 @@ faiss-cpu
 pypdf
 langchain-text-splitters
 
-# Celery for background tasks
-celery[redis]
-redis
-flower
+# Task scheduling
+apscheduler

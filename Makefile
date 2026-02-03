@@ -1,19 +1,15 @@
-.PHONY: help install dev run test lint format clean docker-build docker-up docker-down migrate celery-worker celery-beat run-all
+.PHONY: help install dev run test lint format clean
 
 # Default target
 help:
 	@echo "Available commands:"
 	@echo "  make install       - Install production dependencies"
 	@echo "  make dev           - Install development dependencies"
-	@echo "  make run           - Run the FastAPI server locally"
+	@echo "  make run           - Run the FastAPI server via uvicorn"
 	@echo "  make test          - Run tests with coverage"
-	@echo "  make docker-up     - Start all Docker containers"
-	@echo "  make docker-down   - Stop Docker containers"
-	@echo "  make logs          - View ALL container logs"
-	@echo "  make logs-api      - View FastAPI logs"
-	@echo "  make logs-worker   - View Celery worker logs"
-	@echo "  make logs-beat     - View Celery beat logs"
-	@echo "  make flower        - Open Flower dashboard URL"
+	@echo "  make lint          - Run code quality checks"
+	@echo "  make format        - Format code"
+	@echo "  make clean         - Clean cache files"
 
 # Install production dependencies
 install:
@@ -24,7 +20,7 @@ install:
 dev: install
 	pip install -e .
 
-# Run the FastAPI server
+# Run the FastAPI server via uvicorn
 run:
 	uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
@@ -52,33 +48,3 @@ clean:
 	find . -type d -name "htmlcov" -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete 2>/dev/null || true
 	find . -type f -name ".coverage" -delete 2>/dev/null || true
-
-# Docker commands
-docker-build:
-	docker-compose build
-
-docker-up:
-	docker-compose up -d
-
-docker-down:
-	docker-compose down
-
-# View ALL logs
-logs:
-	docker-compose logs -f
-
-# View FastAPI logs
-logs-api:
-	docker logs api -f
-
-# View Celery worker logs
-logs-worker:
-	docker logs celery-worker -f
-
-# View Celery beat logs
-logs-beat:
-	docker logs celery-beat -f
-
-# Flower dashboard
-flower:
-	@echo "Flower Dashboard: http://localhost:5555"

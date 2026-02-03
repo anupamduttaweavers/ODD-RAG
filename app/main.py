@@ -8,6 +8,7 @@ from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.hash_database import init_hash_db
 from app.core.logging import logger
+from app.core.scheduler import start_scheduler, stop_scheduler
 from app.utils.hash_registry import sync_all_folders, load_all_files_to_vectorstore
 from app.vectorstore.vectorstore import save_vectorstore, vector_store
 
@@ -65,12 +66,74 @@ async def lifespan(app: FastAPI):
     else:
         logger.info(f"Vector store loaded from disk with {vector_store.index.ntotal} chunks.")
     
+    # Start the background scheduler for periodic sync tasks
+    logger.info("Starting background scheduler for 2-minute sync interval...")
+    start_scheduler()
+    
     yield
     # Shutdown
     logger.info("Shutting down...")
+    
+    # Stop the background scheduler
+    stop_scheduler()
+    
     logger.info("Saving vector store to disk...")
     save_vectorstore(vector_store)
     logger.info("Vector store saved. Goodbye!")
+
+
+def create_application() -> FastAPI:
+    """Create and configure the FastAPI application."""
+    application = FastAPI(
+        title=settings.APP_NAME,
+        version=settings.APP_VERSION,
+        description="A chatbot api endpoints that understands the intent behind a user's query and retrives relevent documents/chunks  and exact pages/sections from an uploaded document repository, using semantic search and RAG.",
+        docs_url="/docs",
+        redoc_url="/redoc",
+        openapi_url="/openapi.json",
+        lifespan=lifespan,
+    )
+
+    # Configure CORS
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.ALLOWED_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    # # Log incoming requests to identify health check source
+    # @application.middleware("http")
+    # async def log_requests(request, call_next):
+    #     if request.url.path == "/health":
+    #         logger.info(f"Health check from {request.client.host}:{request.client.port} ua='{request.headers.get('user-agent', 'N/A')}'")
+    #     response = await call_next(request)
+    #     return response
+
+    # Include API router
+    application.include_router(api_router, prefix="/api/v1")
+
+    return application
+
+
+app = create_application()
+
+
+@app.get("/", tags=["Root"])
+async def root():
+    """Root endpoint."""
+    return {
+        "message": "Welcome to FastAPI",
+        "docs": "/docs",
+        "redoc": "/redoc",
+    }
+
+
+@app.get("/health", tags=["Health"])
+async def health_check():
+    """Health check endpoint."""
+    return {"status": "healthy"}
 
 
 def create_application() -> FastAPI:
