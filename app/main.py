@@ -1,9 +1,12 @@
 """Main FastAPI Application."""
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.hash_database import init_hash_db
@@ -103,59 +106,10 @@ def create_application() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # # Log incoming requests to identify health check source
-    # @application.middleware("http")
-    # async def log_requests(request, call_next):
-    #     if request.url.path == "/health":
-    #         logger.info(f"Health check from {request.client.host}:{request.client.port} ua='{request.headers.get('user-agent', 'N/A')}'")
-    #     response = await call_next(request)
-    #     return response
-
-    # Include API router
-    application.include_router(api_router, prefix="/api/v1")
-
-    return application
-
-
-app = create_application()
-
-
-@app.get("/", tags=["Root"])
-async def root():
-    """Root endpoint."""
-    return {
-        "message": "Welcome to FastAPI",
-        "docs": "/docs",
-        "redoc": "/redoc",
-    }
-
-
-@app.get("/health", tags=["Health"])
-async def health_check():
-    """Health check endpoint."""
-    return {"status": "healthy"}
-
-
-def create_application() -> FastAPI:
-    """Create and configure the FastAPI application."""
-    application = FastAPI(
-        title=settings.APP_NAME,
-        version=settings.APP_VERSION,
-        description="A chatbot api endpoints that understands the intent behind a user's query and retrives relevent documents/chunks  and exact pages/sections from an uploaded document repository, using semantic search and RAG.",
-        docs_url="/docs",
-        redoc_url="/redoc",
-        openapi_url="/openapi.json",
-        lifespan=lifespan,
-    )
-
-    # Configure CORS
-    application.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.ALLOWED_ORIGINS,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    # Mount static files
+    static_dir = Path(__file__).parent / "static"
+    if static_dir.exists():
+        application.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
     # # Log incoming requests to identify health check source
     # @application.middleware("http")
@@ -176,12 +130,17 @@ app = create_application()
 
 @app.get("/", tags=["Root"])
 async def root():
-    """Root endpoint."""
-    return {
-        "message": "Welcome to FastAPI",
-        "docs": "/docs",
-        "redoc": "/redoc",
-    }
+    """Root endpoint - redirect to chat page."""
+    return {"message": "Welcome to Semantic Document Discovery", "chat_url": "/test_chat"}
+
+
+@app.get("/test_chat", tags=["Chat_Frontend"])
+async def chat_page():
+    """Serve the chat interface page."""
+    chat_file = Path(__file__).parent / "static" / "chat.html"
+    if chat_file.exists():
+        return FileResponse(chat_file, media_type="text/html")
+    return {"error": "Chat page not found"}
 
 
 @app.get("/health", tags=["Health"])

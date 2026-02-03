@@ -674,21 +674,55 @@ async def sync_data_folder_changes(base_folder: Path) -> dict:
         if registered_path not in current_files:
             try:
                 # File was deleted - remove from vectorstore
-                chunks_deleted = delete_documents_by_file_path(registered_path)
+                chunks_deleted = delete_documents_by_file_name(registered_path.split('/')[-1])
                 results["chunks_removed"] += chunks_deleted
                 
                 # Remove from hash registry
                 remove_hash(record.content_hash)
                 
                 results["deleted_files_removed"] += 1
-                if chunks_deleted == 0:
-                    chunks_deleted = delete_documents_by_file_name(registered_path.split('/')[-1])
-                    results["chunks_removed"] += chunks_deleted
+                
+                    
             except Exception as e:
                 results["errors"].append({
                     "file": record.file_name,
                     "action": "delete",
                     "error": str(e)
                 })
+    
+    # Step 4: Process unprocessed files that still exist
+    # Files that are registered but not yet processed
+    unprocessed_files = get_unprocessed_files()
+    
+    for unprocessed_record in unprocessed_files:
+        # Check if file still exists
+        if unprocessed_record.file_path not in current_files:
+            # File doesn't exist anymore, skip it (will be cleaned up in next sync)
+            continue
+        
+        try:
+            # File exists but not processed, process it now
+            doc_info, chunks = process_file(
+                file_path=unprocessed_record.file_path,
+                folder_name=unprocessed_record.folder_name
+            )
+            
+            if chunks:
+                await add_documents(chunks)
+                results["chunks_added"] += len(chunks)
+            
+            # Mark as processed
+            update_processing_status(
+                content_hash=unprocessed_record.content_hash,
+                is_processed=True,
+                chunk_count=len(chunks)
+            )
+            
+        except Exception as e:
+            results["errors"].append({
+                "file": unprocessed_record.file_name,
+                "action": "process_unprocessed",
+                "error": str(e)
+            })
     
     return results
