@@ -437,14 +437,7 @@ def get_unprocessed_files() -> list[FileHashRegistry]:
 
 async def load_all_files_to_vectorstore(base_folder: Path) -> dict[str, dict]:
     """
-    Load ALL files from all folders into the vectorstore.
-    
-    Since vectorstore is in-memory, ALL files must be loaded on each startup.
-    This function:
-    1. Scans all folders in base_folder
-    2. Processes EVERY file (PDF/txt) and adds to vectorstore
-    3. Registers any unregistered files in hash registry
-    4. Marks previously unprocessed files as processed
+    Load all files stored in the hash registry in the vectore store.
     
     Args:
         base_folder: Base data folder path (e.g., Data/)
@@ -460,90 +453,41 @@ async def load_all_files_to_vectorstore(base_folder: Path) -> dict[str, dict]:
     if not base_folder.exists():
         return results
     
-    # Iterate through each folder
-    for folder_path in base_folder.iterdir():
-        if not folder_path.is_dir():
+    all_registered = get_all_hashes()
+    registered_paths = {record.file_path: record for record in all_registered}
+
+    for folder_path in registered_paths.values():
+        folder_name = folder_path.folder_name
+        if folder_name not in results:
+            results[folder_name] = {
+                "loaded": 0,
+                "chunks": 0,
+                "newly_processed": 0,
+                "errors": []
+            }
+        is_processed = folder_path.is_processed
+        file_path = folder_path.file_path
+        if not is_processed:
+            continue  # Skip unprocessed files here
+        try:
+            doc_info, chunks = process_file(
+                file_path=file_path,
+                folder_name=folder_name
+            )
+            if chunks:
+                await add_documents(chunks)
+                results[folder_name]["loaded"] += 1
+                results[folder_name]["chunks"] += len(chunks)
+        except Exception as e:
+            print(f"Error processing file {file_path}: {e}")
+            results[folder_name]["errors"].append({
+                "file": folder_path.file_name,
+                "error": str(e)
+            })
             continue
-            
-        folder_name = folder_path.name
-        folder_result = {
-            "loaded": 0,
-            "chunks": 0,
-            "newly_processed": 0,  # Files that were unprocessed, now marked processed
-            "errors": []
-        }
         
-        # Iterate through each file in the folder
-        for file_path in folder_path.iterdir():
-            if not file_path.is_file():
-                continue
-                
-            if file_path.suffix.lower() not in ('.pdf', '.txt'):
-                continue
-            
-            try:
-                # Calculate hash
-                content_hash = calculate_hash_from_file(str(file_path))
-                
-                # Check if already registered in hash registry
-                lookup = lookup_hash(content_hash)
-                was_unprocessed = False
-                
-                if not lookup.exists:
-                    # File not registered, register it first
-                    register_hash(
-                        content_hash=content_hash,
-                        file_name=file_path.name,
-                        file_path=str(file_path),
-                        folder_name=folder_name,
-                        file_type=file_path.suffix.lower().lstrip('.'),
-                        file_size=file_path.stat().st_size,
-                        is_processed=False
-                    )
-                    was_unprocessed = True
-                else:
-                    # Check if it was previously unprocessed
-                    session = get_session()
-                    try:
-                        statement = select(FileHashRegistry).where(
-                            FileHashRegistry.content_hash == content_hash
-                        )
-                        file_record = session.exec(statement).first()
-                        if file_record and not file_record.is_processed:
-                            was_unprocessed = True
-                    finally:
-                        session.close()
-                
-                # Process the file (ALWAYS - vectorstore is in-memory)
-                doc_info, chunks = process_file(
-                    file_path=str(file_path),
-                    folder_name=folder_name
-                )
-                
-                # Add chunks to vectorstore
-                if chunks:
-                    await add_documents(chunks)
-                
-                # Update processing status if it was unprocessed
-                if was_unprocessed:
-                    update_processing_status(
-                        content_hash=content_hash,
-                        is_processed=True,
-                        chunk_count=len(chunks)
-                    )
-                    folder_result["newly_processed"] += 1
-                
-                folder_result["loaded"] += 1
-                folder_result["chunks"] += len(chunks)
-                
-            except Exception as e:
-                folder_result["errors"].append({
-                    "file": file_path.name,
-                    "error": str(e)
-                })
+        results[folder_name]["newly_processed"] += 1
         
-        results[folder_name] = folder_result
-    
     return results
 
 
