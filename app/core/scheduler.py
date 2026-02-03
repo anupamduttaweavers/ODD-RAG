@@ -34,7 +34,7 @@ async def sync_data_folder_changes_job():
         results = await sync_data_folder_changes(settings.BASE_DATA_FOLDER)
         
         # Log results
-        logger.info(f"[SYNC JOB] Sync completed!\nNew files added: {results['new_files_added']}\nDuplicates skipped: {results['new_files_skipped_duplicate']}\nDeleted files removed: {results['deleted_files_removed']}\nChunks added: {results['chunks_added']}\nChunks removed: {results['chunks_removed']}")
+        logger.info(f"[SYNC JOB] Sync status!\nNew files added: {results['new_files_added']}\nDuplicates skipped: {results['new_files_skipped_duplicate']}\nDeleted files removed: {results['deleted_files_removed']}\nChunks added: {results['chunks_added']}\nChunks removed: {results['chunks_removed']}")
         # logger.info(f"[SYNC JOB] New files added: {results['new_files_added']}")
         # logger.info(f"[SYNC JOB] Duplicates skipped: {results['new_files_skipped_duplicate']}")
         # logger.info(f"[SYNC JOB] Deleted files removed: {results['deleted_files_removed']}")
@@ -50,12 +50,12 @@ async def sync_data_folder_changes_job():
         if results['chunks_added'] > 0 or results['chunks_removed'] > 0:
             save_vectorstore(vector_store)
             logger.info(f"[SYNC JOB] Vectorstore saved with {vector_store.index.ntotal} chunks.")
-        logger.info("="*10)
+        logger.info("[SYNC JOB] Sync complete!")
         return results
         
     except Exception as e:
         logger.error(f"[SYNC JOB] Error during sync: {str(e)}", exc_info=True)
-        logger.info("="*10)
+        logger.info("[SYNC JOB] Sync complete!")
         raise
 
 
