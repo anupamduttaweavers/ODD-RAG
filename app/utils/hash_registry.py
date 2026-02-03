@@ -574,6 +574,8 @@ async def sync_data_folder_changes(base_folder: Path) -> dict:
                     if existing_record.is_processed:
                         # Skip - content already in vectorstore, no need to reprocess
                         results["new_files_skipped_duplicate"] += 1
+                        # remove the duplicate file from disk
+                        # os.remove(file_path_str)#(Optional)
                         continue
                 
                 # New file with new content - register and process
@@ -654,7 +656,7 @@ async def sync_data_folder_changes(base_folder: Path) -> dict:
             if chunks:
                 await add_documents(chunks)
                 results["chunks_added"] += len(chunks)
-            
+                results["new_files_added"] += 1
             # Mark as processed
             update_processing_status(
                 content_hash=unprocessed_record.content_hash,

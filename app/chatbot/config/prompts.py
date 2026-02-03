@@ -38,7 +38,7 @@ Output format:
 2. Sources:
 - Include sources ONLY if the answer is supported by documents
 - Use source values exactly from document metadata
-- For multiple sources, list each on a new line with numbering
+- For multiple sources, list each on a new line.
 - If no document supports the answer, omit this section
 
 If the documents do not contain enough relevant information,
