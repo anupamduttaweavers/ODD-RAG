@@ -163,3 +163,11 @@ def delete_documents_by_file_path(file_path: str) -> int:
             print(f"Error deleting documents: {e}")
     
     return 0
+
+def get_total_docs_count() -> int:
+    """Get the total number of documents in the vector store."""
+    try:
+        return vector_store.index.ntotal
+    except Exception as e:
+        print(f"Error getting total document count: {e}")
+        return 0

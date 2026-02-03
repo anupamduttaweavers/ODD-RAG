@@ -17,8 +17,8 @@ from app.vectorstore.operations import add_documents
 router = APIRouter()
 
 
-@router.get("/all_files/")
-async def list_files(folder_name: Optional[str] = None):
+@router.get("/all_files_in_hash_registry/")
+async def list_files_in_hash_registry(folder_name: Optional[str] = None):
     """
     List all registered files, optionally filtered by folder.
 
