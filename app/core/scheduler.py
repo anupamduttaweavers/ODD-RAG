@@ -65,10 +65,10 @@ def start_scheduler():
     """Start the background task scheduler."""
     logger.info("Starting APScheduler...")
     
-    # Add the sync job: runs every 2 minutes (120 seconds)
+    # Add the sync job: runs every Ssettings.SYNC_INTERVAL_SECONDS seconds
     scheduler.add_job(
         sync_data_folder_changes_job,
-        trigger=IntervalTrigger(seconds=120),
+        trigger=IntervalTrigger(seconds=settings.SYNC_INTERVAL_SECONDS),
         id='sync-data-folder-every-2-minutes',
         name='Sync Data Folder Changes',
         replace_existing=True,

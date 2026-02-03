@@ -70,7 +70,7 @@ async def lifespan(app: FastAPI):
         logger.info(f"Vector store loaded from disk with {vector_store.index.ntotal} chunks.")
     
     # Start the background scheduler for periodic sync tasks
-    logger.info("Starting background scheduler for 2-minute sync interval...")
+    logger.info(f"Starting background scheduler for {settings.SYNC_INTERVAL_SECONDS} seconds interval...")
     start_scheduler()
     
     yield
