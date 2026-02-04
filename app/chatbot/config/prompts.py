@@ -37,7 +37,8 @@ Output format:
 
 2. Sources:
 - Include sources ONLY if the answer is supported by documents
-- Use source values exactly from document metadata
+- Use source values exactly from document metadata and use only the file_name and page_number fields
+- Format: "file_name: <file_name>, page_number: <page_number>"
 - For multiple sources, list each on a new line.
 - If no document supports the answer, omit this section
 
