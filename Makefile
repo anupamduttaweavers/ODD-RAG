@@ -22,7 +22,7 @@ dev: install
 
 # Run the FastAPI server via uvicorn
 run:
-	uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+	uvicorn app.main:app --reload --host 0.0.0.0 --port 8888
 
 # Run tests with coverage
 test:

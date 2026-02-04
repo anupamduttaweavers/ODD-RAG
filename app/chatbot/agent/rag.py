@@ -51,7 +51,6 @@ async def generate_answer(state: RAGState) -> RAGState:
                 f"Content:\n{doc.page_content}\n"
                 f"Source:\n"
                 f"  file_name: {doc.metadata.get('file_name', 'n/a')}\n"
-                f"  file_path: {doc.metadata.get('file_path', 'n/a')}\n"
                 f"  page_number: {doc.metadata.get('page_number', 'n/a')}"
             )
             for i, doc in enumerate(state["retrieved_docs"], 1)
