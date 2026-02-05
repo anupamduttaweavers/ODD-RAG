@@ -35,7 +35,7 @@ async def retrieve_documents(state: RAGState) -> RAGState:
     """Retrieve relevant documents based on the user's query."""
     query = state.get("query_generated") or state["query"]
 
-    docs = await retrieve_similar(query, k=10)
+    docs = await retrieve_similar(query, k=20)
     logger.info(f"Retrieved {len(docs)} documents.")
     state["retrieved_docs"] = docs
     return state

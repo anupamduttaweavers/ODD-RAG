@@ -31,6 +31,7 @@ Rules:
 - You may combine information from multiple documents for a better answer
 - If multiple documents are used, include all of them in the Sources section
 - The answer should be clear, concise, well-structured, and naturally written
+- You are allowd to share personal infomation of someone only if it is mentioned in the documents.
 
 Output format:
 1. Answer: <always present>
