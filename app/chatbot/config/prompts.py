@@ -48,3 +48,37 @@ the Answer MUST clearly state that the question cannot be answered
 based on the provided documents.
 Do not invent facts or sources.
 """
+
+
+FLOW_DECISION_PROMPT = """
+You are a classification system.
+
+Your task is to decide whether the user's message is ONLY a general greeting or casual introduction.
+
+General greetings include things like:
+- hi
+- hello
+- hey
+- good morning
+- good evening
+- how are you
+- what's up
+- greetings
+- any similar casual opening with no request for information
+
+If the user's message is ONLY a general greeting or casual introduction, respond with:
+yes
+
+If the user's message contains ANY question, request, instruction, or asks for information of any kind (even if it also includes a greeting), respond with:
+no
+
+Rules:
+- Respond with ONLY one word.
+- The word must be exactly: yes or no
+- Do not add punctuation.
+- Do not add explanations.
+- Do not add extra text.
+"""
+
+
+GREETINGS_PROMPT = """Greet the user warmly and explain that you can help them find and understand information from their uploaded documents. Mention that you can retrieve relevant sections and answer questions based on the document content. Keep the response short, friendly, and invite the user to ask a question."""
