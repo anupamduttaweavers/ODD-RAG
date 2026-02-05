@@ -20,7 +20,7 @@ def create_new_vectorstore() -> FAISS:
         docstore=InMemoryDocstore(),
         index_to_docstore_id={},
         normalize_L2=True,# Add this line to normalize vectors for cosine similarity
-        distance_strategy=DistanceStrategy.COSINE,
+        # distance_strategy=DistanceStrategy.COSINE,
     )
 
 

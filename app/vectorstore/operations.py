@@ -15,15 +15,15 @@ async def add_documents(documents: list[Document]):
 async def retrieve_similar(query, k=5):
     """Retrieve similar documents from the vector store."""
     try:
-        results = vector_store.similarity_search(query, k=k)
-        # results = vector_store.similarity_search_with_score(
-        #     query, 
-        #     k=k,
-        # )
+        # results = vector_store.similarity_search(query, k=k)
+        results = vector_store.similarity_search_with_score(
+            query, 
+            k=k,
+        )
         # print(",".join([str(score) for doc, score in results]))
-#         results = [
-#     doc for doc, score in results 
-# ]
+        results = [
+    doc for doc, score in results 
+]
         return  results
     except Exception as e:
         print(f"Error retrieving documents: {e}")
