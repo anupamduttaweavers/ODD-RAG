@@ -11,8 +11,8 @@ logger = get_logger(__name__)
 
 def create_new_vectorstore() -> FAISS:
     """Create a fresh in-memory FAISS vector store."""
-    index = faiss.IndexFlatL2(settings.DINMS) #->This is for the L2 distance matric
-    # index = faiss.IndexFlatIP(settings.DINMS)  # ->This is for the inner product matric(cosine similarity)
+    # index = faiss.IndexFlatL2(settings.DINMS) #->This is for the L2 distance matric
+    index = faiss.IndexFlatIP(settings.DINMS)  # ->This is for the inner product matric(cosine similarity)
     
     return FAISS(
         embedding_function=embeddings,
@@ -20,7 +20,7 @@ def create_new_vectorstore() -> FAISS:
         docstore=InMemoryDocstore(),
         index_to_docstore_id={},
         normalize_L2=True,# Add this line to normalize vectors for cosine similarity
-        # distance_strategy=DistanceStrategy.MAX_INNER_PRODUCT,
+        distance_strategy=DistanceStrategy.COSINE,
     )
 
 

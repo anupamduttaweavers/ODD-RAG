@@ -57,5 +57,9 @@ class Settings(BaseSettings):
     # Task Scheduler
     SYNC_INTERVAL_SECONDS: int = 120  # 2 minutes
 
+    # Document Processing
+    DEFAULT_CHUNK_SIZE: int = 1000
+    DEFAULT_CHUNK_OVERLAP: int = 200
+    DEFAULT_LINES_PER_PAGE: int = 50
 
 settings = Settings()

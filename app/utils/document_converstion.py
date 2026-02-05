@@ -5,18 +5,17 @@ import hashlib
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
-
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader
 
 from app.schemas.document import PageInfo, DocumentInfo
-
+from app.core.config import settings
 
 # Configuration
-DEFAULT_CHUNK_SIZE = 1000
-DEFAULT_CHUNK_OVERLAP = 200
-DEFAULT_LINES_PER_PAGE = 50  # For text files: 50 lines = 1 "page"
+DEFAULT_CHUNK_SIZE = settings.DEFAULT_CHUNK_SIZE
+DEFAULT_CHUNK_OVERLAP = settings.DEFAULT_CHUNK_OVERLAP
+DEFAULT_LINES_PER_PAGE = settings.DEFAULT_LINES_PER_PAGE  # For text files: 50 lines = 1 "page"
 
 
 def calculate_hash(content: str) -> str:
