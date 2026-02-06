@@ -14,7 +14,7 @@ from app.core.logging import logger
 from app.core.scheduler import start_scheduler, stop_scheduler
 from app.utils.hash_registry import sync_all_folders, load_all_files_to_vectorstore
 from app.vectorstore.vectorstore import save_vectorstore, vector_store
-from app.vectorstore.operations import get_total_docs_count
+
 
 
 @asynccontextmanager
@@ -135,7 +135,7 @@ async def root():
     return {"message": "Welcome to Semantic Document Discovery", "chat_url": "/test_chat"}
 
 
-@app.get("/test_chat", tags=["Chat_Frontend"])
+@app.get("/chat", tags=["Chat_Frontend"])
 async def chat_page():
     """Serve the chat interface page."""
     chat_file = Path(__file__).parent / "static" / "chat.html"
