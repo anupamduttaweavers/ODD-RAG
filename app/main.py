@@ -132,7 +132,7 @@ app = create_application()
 @app.get("/", tags=["Root"])
 async def root():
     """Root endpoint - redirect to chat page."""
-    return {"message": "Welcome to Semantic Document Discovery", "chat_url": "/test_chat"}
+    return {"message": "Welcome to Semantic Document Discovery", "chat_url": "/chat"}
 
 
 @app.get("/chat", tags=["Chat_Frontend"])
