@@ -2,16 +2,16 @@ from fastapi import APIRouter, HTTPException, Query, Body
 
 
 from app.vectorstore.operations import retrieve_similar
-from app.schemas.search import SearchResponse
+from app.schemas.search import SearchResponse, SearchRequest
 
 router = APIRouter()
 
 
 
 
-@router.get("/similar/", response_model=SearchResponse)
+@router.post("/similar/", response_model=SearchResponse)
 async def search_similar_chunks(
-    query: str = Body(..., min_length=1, description="Search query string",embed=True),
+    query: str,
     k: int = Query(default=15, ge=1, le=50, description="Number of results to return"),
     # folder_name: Optional[str] = Query(default=None, description="Filter by folder name")
 ):
@@ -29,6 +29,7 @@ async def search_similar_chunks(
     Returns:
         SearchResponse with matching chunks and their metadata
     """
+    print(f"Received search query: {query} with k={k}")
     try:
         # Retrieve similar documents from vectorstore
         docs = await retrieve_similar(query, k=k)

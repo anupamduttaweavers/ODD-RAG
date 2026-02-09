@@ -20,3 +20,7 @@ class SearchResponse(BaseModel):
     query: str
     count: int
     results: List[dict]
+
+class SearchRequest(BaseModel):
+    """Request model for search query."""
+    query: str
