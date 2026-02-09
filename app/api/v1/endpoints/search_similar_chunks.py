@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Body
 
 
 from app.vectorstore.operations import retrieve_similar
@@ -11,7 +11,7 @@ router = APIRouter()
 
 @router.get("/similar/", response_model=SearchResponse)
 async def search_similar_chunks(
-    query: str = Query(..., min_length=1, description="Search query string"),
+    query: str = Body(..., min_length=1, description="Search query string",embed=True),
     k: int = Query(default=15, ge=1, le=50, description="Number of results to return"),
     # folder_name: Optional[str] = Query(default=None, description="Filter by folder name")
 ):

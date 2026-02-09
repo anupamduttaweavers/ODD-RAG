@@ -1,4 +1,4 @@
-from fastapi import APIRouter,HTTPException
+from fastapi import APIRouter,HTTPException,Body
 from fastapi.responses import JSONResponse
 from app.chatbot.agent.rag import rag_graph
 
@@ -6,7 +6,7 @@ router = APIRouter()
 
 
 @router.post("/chat")
-async def chat_endpoint(query: str):
+async def chat_endpoint(query: str=Body(..., min_length=1, description="User query string", embed=True)):
     """Endpoint to handle chat requests."""
     try:
         inital_state = {"query": query}
