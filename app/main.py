@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from app.api.v1.router import api_router
 from app.core.config import settings
+from app.sync_manager.router import router as sync_manager_router
 from app.core.hash_database import init_hash_db
 from app.core.logging import logger
 from app.core.scheduler import start_scheduler, stop_scheduler
@@ -123,6 +124,11 @@ def create_application() -> FastAPI:
     # Include API router
     application.include_router(api_router, prefix="/api/v1")
 
+    # Include Sync Management router (independent module)
+    application.include_router(
+        sync_manager_router, prefix="/api/v1/sync", tags=["Sync Management"]
+    )
+
     return application
 
 
@@ -142,6 +148,15 @@ async def chat_page():
     if chat_file.exists():
         return FileResponse(chat_file, media_type="text/html")
     return {"error": "Chat page not found"}
+
+
+@app.get("/chat/admin", tags=["Admin"])
+async def admin_page():
+    """Serve the sync administration panel."""
+    admin_file = Path(__file__).parent / "static" / "admin.html"
+    if admin_file.exists():
+        return FileResponse(admin_file, media_type="text/html")
+    return {"error": "Admin page not found"}
 
 
 @app.get("/health", tags=["Health"])
