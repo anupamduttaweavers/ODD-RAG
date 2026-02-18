@@ -1,0 +1,1 @@
+"""File source adapter implementations."""

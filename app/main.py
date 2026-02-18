@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.sync_manager.router import router as sync_manager_router
+from app.filesource.router import router as filesource_router
 from app.core.hash_database import init_hash_db
 from app.core.logging import logger
 from app.core.scheduler import start_scheduler, stop_scheduler
@@ -129,6 +130,11 @@ def create_application() -> FastAPI:
         sync_manager_router, prefix="/api/v1/sync", tags=["Sync Management"]
     )
 
+    # Include File Source Configuration router (independent module)
+    application.include_router(
+        filesource_router, prefix="/api/v1/filesources", tags=["File Sources"]
+    )
+
     return application
 
 
@@ -148,6 +154,15 @@ async def chat_page():
     if chat_file.exists():
         return FileResponse(chat_file, media_type="text/html")
     return {"error": "Chat page not found"}
+
+
+@app.get("/admin/filesource-config", tags=["Admin"])
+async def filesource_admin_page():
+    """Serve the file source configuration admin panel."""
+    page = Path(__file__).parent / "static" / "filesource-admin.html"
+    if page.exists():
+        return FileResponse(page, media_type="text/html")
+    return {"error": "File source admin page not found"}
 
 
 @app.get("/chat/admin", tags=["Admin"])
