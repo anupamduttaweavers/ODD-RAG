@@ -28,7 +28,7 @@ def init_filesource_db() -> None:
     global _initialized
     if _initialized:
         return
-    from app.filesource.models import FileSourceConfig  # noqa: F401
+    from app.filesource.models import FileSourceConfig, FilesourceProcessedHash  # noqa: F401
     SQLModel.metadata.create_all(engine)
     _migrate_add_columns()
     _initialized = True

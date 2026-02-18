@@ -1,37 +1,98 @@
 """
 Direct scan-and-vectorize engine for file sources.
 
-Reads files **directly** from the source path (local, NFS, mounted SMB)
-and feeds them through the existing processing pipeline — no file
-copying to BASE_DATA_FOLDER required.
+Reads files **directly** from the source path and feeds them through
+the existing processing pipeline.
 
-For truly remote protocols (SFTP, FTP, unmounted SMB) a temporary
-download is used; temp files are cleaned up after vectorization.
+CRITICAL DESIGN DECISION — separate hash tracking:
+  The scanner tracks processed files in ``filesource_processed_hash``
+  (inside ``filesource_config.db``), NOT in the main ``hash_registry``.
+  This prevents the existing ``sync_data_folder_changes`` from treating
+  file-source entries as "deleted files" and removing their chunks
+  every cycle.
 
-The auto-scan job is registered on the **existing** APScheduler so it
-runs on the same interval as the BASE_DATA_FOLDER sync.  When the
-admin changes the interval via ``/chat/admin``, both jobs are
-rescheduled together.
+The auto-scan job is registered on the existing APScheduler so it
+runs on the same interval as the BASE_DATA_FOLDER sync.
 """
 
+import hashlib
 import logging
 import os
 import tempfile
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Optional, Set
 
 from apscheduler.triggers.interval import IntervalTrigger
 from sqlmodel import select
 
 from app.filesource import crypto
 from app.filesource.adapters.registry import create_adapter
-from app.filesource.database import get_session
-from app.filesource.models import DEFAULT_PORTS, FileSourceConfig
+from app.filesource.database import get_session as get_fs_session
+from app.filesource.models import DEFAULT_PORTS, FileSourceConfig, FilesourceProcessedHash
 
 logger = logging.getLogger("app.filesource")
 
 _ALLOWED_EXT: Set[str] = {".pdf", ".txt"}
 FILESOURCE_JOB_ID = "filesource-auto-scan"
+
+
+# ── Hash tracking (separate from main hash_registry) ─────
+
+def _hash_exists(content_hash: str) -> bool:
+    """Check if a file was already processed — checks BOTH registries."""
+    session = get_fs_session()
+    try:
+        hit = session.exec(
+            select(FilesourceProcessedHash).where(
+                FilesourceProcessedHash.content_hash == content_hash
+            )
+        ).first()
+        if hit:
+            return True
+    finally:
+        session.close()
+
+    try:
+        from app.utils.hash_registry import lookup_hash
+        return lookup_hash(content_hash).exists
+    except Exception:
+        return False
+
+
+def _record_processed(content_hash: str, file_name: str, source_name: str, chunk_count: int) -> None:
+    """Record a processed file in the file-source tracking table."""
+    session = get_fs_session()
+    try:
+        existing = session.exec(
+            select(FilesourceProcessedHash).where(
+                FilesourceProcessedHash.content_hash == content_hash
+            )
+        ).first()
+        if existing:
+            return
+        entry = FilesourceProcessedHash(
+            content_hash=content_hash,
+            file_name=file_name,
+            source_name=source_name,
+            chunk_count=chunk_count,
+            processed_at=datetime.utcnow(),
+        )
+        session.add(entry)
+        session.commit()
+    except Exception as exc:
+        session.rollback()
+        logger.warning("[SCANNER] Failed to record hash: %s", exc)
+    finally:
+        session.close()
+
+
+def _calculate_hash(file_path: str) -> str:
+    sha = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            sha.update(chunk)
+    return sha.hexdigest()
 
 
 # ── Direct scan (single source) ──────────────────────────
@@ -40,12 +101,11 @@ async def scan_and_vectorize(source_id: int) -> Dict[str, Any]:
     """
     Scan files at the source path and vectorize them in-place.
 
-    For local / NFS / mounted paths the files are read directly —
-    nothing is copied.  For SFTP / FTP / SMB the files are downloaded
-    to a temporary directory, processed, then the temp files are
-    removed.
+    For any locally-accessible path the files are read directly.
+    For truly remote sources (SFTP/FTP/SMB) files are downloaded
+    to a temp directory, processed, then cleaned up.
     """
-    session = get_session()
+    session = get_fs_session()
     try:
         src = session.get(FileSourceConfig, source_id)
         if not src:
@@ -53,13 +113,18 @@ async def scan_and_vectorize(source_id: int) -> Dict[str, Any]:
         if not src.is_enabled:
             return _result(False, source_id, src.name, "Source is disabled")
 
-        protocol = src.protocol
-        is_local_path = protocol in ("local", "nfs")
+        base = Path(src.base_path)
+        is_locally_accessible = base.exists() and base.is_dir()
 
-        if is_local_path:
+        if is_locally_accessible:
             return await _scan_local_path(src)
+        elif src.protocol in ("sftp", "smb", "ftp"):
+            return await _scan_remote_via_temp(src)
         else:
-            return await _scan_remote_via_temp(src, session)
+            return _result(
+                False, source_id, src.name,
+                f"Path not accessible and protocol '{src.protocol}' has no remote adapter"
+            )
     except Exception as exc:
         logger.error("[SCANNER] scan_and_vectorize error: %s", exc, exc_info=True)
         return _result(False, source_id, "", f"Scan error: {exc}")
@@ -69,22 +134,11 @@ async def scan_and_vectorize(source_id: int) -> Dict[str, Any]:
 
 async def _scan_local_path(src: FileSourceConfig) -> Dict[str, Any]:
     """Directly scan a locally-accessible path — zero file copying."""
-    from app.core.hash_database import init_hash_db
     from app.utils.document_converstion import process_file
-    from app.utils.hash_registry import (
-        calculate_hash_from_file,
-        lookup_hash,
-        register_hash,
-        update_processing_status,
-    )
     from app.vectorstore.operations import add_documents
     from app.vectorstore.vectorstore import save_vectorstore, vector_store
 
-    init_hash_db()
     base = Path(src.base_path)
-    if not base.exists() or not base.is_dir():
-        return _result(False, src.id, src.name, f"Path not accessible: {src.base_path}")
-
     new_files = 0
     skipped = 0
     chunks_added = 0
@@ -98,30 +152,17 @@ async def _scan_local_path(src: FileSourceConfig) -> Dict[str, Any]:
             folder_name = Path(root).name or src.name
 
             try:
-                content_hash = calculate_hash_from_file(fpath)
-                lookup = lookup_hash(content_hash)
-                if lookup.exists:
+                content_hash = _calculate_hash(fpath)
+                if _hash_exists(content_hash):
                     skipped += 1
                     continue
-
-                register_hash(
-                    content_hash=content_hash,
-                    file_name=fname,
-                    file_path=fpath,
-                    folder_name=folder_name,
-                    file_type=Path(fname).suffix.lower().lstrip("."),
-                    file_size=os.path.getsize(fpath),
-                    is_processed=False,
-                )
 
                 doc_info, chunks = process_file(file_path=fpath, folder_name=folder_name)
                 if chunks:
                     await add_documents(chunks)
                     chunks_added += len(chunks)
 
-                update_processing_status(
-                    content_hash=content_hash, is_processed=True, chunk_count=len(chunks)
-                )
+                _record_processed(content_hash, fname, src.name, len(chunks))
                 new_files += 1
             except Exception as exc:
                 errors.append(f"{fname}: {exc}")
@@ -134,7 +175,7 @@ async def _scan_local_path(src: FileSourceConfig) -> Dict[str, Any]:
     msg = f"Scan complete: {new_files} new, {skipped} skipped, {chunks_added} chunks"
     if errors:
         msg += f", {len(errors)} errors"
-    logger.info("[SCANNER] %s — source '%s'", msg, src.name)
+    logger.info("[SCANNER] %s — source '%s' (direct)", msg, src.name)
 
     return {
         "success": True,
@@ -149,25 +190,15 @@ async def _scan_local_path(src: FileSourceConfig) -> Dict[str, Any]:
     }
 
 
-async def _scan_remote_via_temp(src: FileSourceConfig, session) -> Dict[str, Any]:
+async def _scan_remote_via_temp(src: FileSourceConfig) -> Dict[str, Any]:
     """
     For truly remote sources: download to temp dir, vectorize, clean up.
-
-    The temp files are deleted after processing — nothing permanent is
-    stored on the local system except the vectors in FAISS.
+    Nothing permanent is stored locally except the vectors in FAISS.
     """
-    from app.core.hash_database import init_hash_db
     from app.utils.document_converstion import process_file
-    from app.utils.hash_registry import (
-        calculate_hash_from_file,
-        lookup_hash,
-        register_hash,
-        update_processing_status,
-    )
     from app.vectorstore.operations import add_documents
     from app.vectorstore.vectorstore import save_vectorstore, vector_store
 
-    init_hash_db()
     adapter_cfg = _build_config(src)
 
     try:
@@ -191,35 +222,19 @@ async def _scan_remote_via_temp(src: FileSourceConfig, session) -> Dict[str, Any
                     try:
                         await adapter.download_file(rf["path"], local_tmp)
 
-                        content_hash = calculate_hash_from_file(local_tmp)
-                        lookup = lookup_hash(content_hash)
-                        if lookup.exists:
+                        content_hash = _calculate_hash(local_tmp)
+                        if _hash_exists(content_hash):
                             skipped += 1
                             continue
 
-                        folder_name = src.name
-                        stable_path = f"remote://{src.name}/{rf['relative_path']}"
-
-                        register_hash(
-                            content_hash=content_hash,
-                            file_name=rf["name"],
-                            file_path=stable_path,
-                            folder_name=folder_name,
-                            file_type=Path(rf["name"]).suffix.lower().lstrip("."),
-                            file_size=rf.get("size", 0),
-                            is_processed=False,
-                        )
-
                         doc_info, chunks = process_file(
-                            file_path=local_tmp, folder_name=folder_name
+                            file_path=local_tmp, folder_name=src.name
                         )
                         if chunks:
                             await add_documents(chunks)
                             chunks_added += len(chunks)
 
-                        update_processing_status(
-                            content_hash=content_hash, is_processed=True, chunk_count=len(chunks)
-                        )
+                        _record_processed(content_hash, rf["name"], src.name, len(chunks))
                         new_files += 1
                     except Exception as exc:
                         errors.append(f"{rf['name']}: {exc}")
@@ -236,7 +251,7 @@ async def _scan_remote_via_temp(src: FileSourceConfig, session) -> Dict[str, Any
     msg = f"Scan complete: {new_files} new, {skipped} skipped, {chunks_added} chunks"
     if errors:
         msg += f", {len(errors)} errors"
-    logger.info("[SCANNER] %s — remote source '%s'", msg, src.name)
+    logger.info("[SCANNER] %s — source '%s' (remote)", msg, src.name)
 
     return {
         "success": True,
@@ -260,7 +275,7 @@ async def _auto_scan_all_enabled():
     Runs on the same APScheduler and interval as the BASE_DATA_FOLDER
     sync so that one interval governs all scanning.
     """
-    session = get_session()
+    session = get_fs_session()
     try:
         sources = session.exec(
             select(FileSourceConfig).where(
