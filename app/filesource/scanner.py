@@ -8,18 +8,18 @@ copying to BASE_DATA_FOLDER required.
 For truly remote protocols (SFTP, FTP, unmounted SMB) a temporary
 download is used; temp files are cleaned up after vectorization.
 
-An independent APScheduler job can be started to auto-scan all enabled
-sources on a configurable interval.
+The auto-scan job is registered on the **existing** APScheduler so it
+runs on the same interval as the BASE_DATA_FOLDER sync.  When the
+admin changes the interval via ``/chat/admin``, both jobs are
+rescheduled together.
 """
 
 import logging
 import os
 import tempfile
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from sqlmodel import select
 
@@ -31,9 +31,7 @@ from app.filesource.models import DEFAULT_PORTS, FileSourceConfig
 logger = logging.getLogger("app.filesource")
 
 _ALLOWED_EXT: Set[str] = {".pdf", ".txt"}
-
-_scanner_scheduler = AsyncIOScheduler()
-_DEFAULT_AUTO_SCAN_INTERVAL = 300
+FILESOURCE_JOB_ID = "filesource-auto-scan"
 
 
 # ── Direct scan (single source) ──────────────────────────
@@ -253,54 +251,63 @@ async def _scan_remote_via_temp(src: FileSourceConfig, session) -> Dict[str, Any
     }
 
 
-# ── Auto-scan scheduler ──────────────────────────────────
+# ── Auto-scan (runs on the EXISTING scheduler) ───────────
 
-async def _auto_scan_job():
-    """Scheduled job: scan every enabled source with auto_scan_enabled."""
+async def _auto_scan_all_enabled():
+    """
+    Scheduled job: scan every enabled source.
+
+    Runs on the same APScheduler and interval as the BASE_DATA_FOLDER
+    sync so that one interval governs all scanning.
+    """
     session = get_session()
     try:
         sources = session.exec(
             select(FileSourceConfig).where(
                 FileSourceConfig.is_enabled == True,  # noqa: E712
-                FileSourceConfig.auto_scan_enabled == True,  # noqa: E712
             )
         ).all()
 
         if not sources:
             return
 
-        logger.info("[SCANNER] Auto-scan: %d source(s) to scan", len(sources))
+        logger.info("[SCANNER] Auto-scan cycle: %d enabled source(s)", len(sources))
         for src in sources:
             try:
                 result = await scan_and_vectorize(src.id)
                 logger.info("[SCANNER] Auto-scan '%s': %s", src.name, result.get("message"))
             except Exception as exc:
                 logger.error("[SCANNER] Auto-scan error '%s': %s", src.name, exc)
+        logger.info("[SCANNER] Auto-scan cycle complete")
+    except Exception as exc:
+        logger.error("[SCANNER] Auto-scan cycle error: %s", exc, exc_info=True)
     finally:
         session.close()
 
 
-def start_filesource_scanner(interval_seconds: int = _DEFAULT_AUTO_SCAN_INTERVAL) -> None:
-    """Start the independent auto-scan scheduler."""
-    if _scanner_scheduler.running:
-        return
-    _scanner_scheduler.add_job(
-        _auto_scan_job,
-        trigger=IntervalTrigger(seconds=interval_seconds),
-        id="filesource-auto-scan",
+def register_filesource_scan_job() -> None:
+    """
+    Add the file-source scan job to the **existing** scheduler.
+
+    Call this after ``start_scheduler()`` so the scheduler is already
+    running.  The job uses the same interval as ``SYNC_INTERVAL_SECONDS``
+    so both BASE_DATA_FOLDER and file-source scans happen together.
+    """
+    from app.core.config import settings
+    from app.core.scheduler import scheduler as existing_scheduler
+
+    existing_scheduler.add_job(
+        _auto_scan_all_enabled,
+        trigger=IntervalTrigger(seconds=settings.SYNC_INTERVAL_SECONDS),
+        id=FILESOURCE_JOB_ID,
         name="File Source Auto-Scan",
         replace_existing=True,
         max_instances=1,
     )
-    _scanner_scheduler.start()
-    logger.info("[SCANNER] Auto-scan scheduler started (interval=%ds)", interval_seconds)
-
-
-def stop_filesource_scanner() -> None:
-    """Stop the auto-scan scheduler."""
-    if _scanner_scheduler.running:
-        _scanner_scheduler.shutdown(wait=False)
-        logger.info("[SCANNER] Auto-scan scheduler stopped")
+    logger.info(
+        "[SCANNER] Registered on existing scheduler (interval=%ds)",
+        settings.SYNC_INTERVAL_SECONDS,
+    )
 
 
 # ── Helpers ───────────────────────────────────────────────

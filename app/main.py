@@ -11,7 +11,7 @@ from app.api.v1.router import api_router
 from app.core.config import settings
 from app.sync_manager.router import router as sync_manager_router
 from app.filesource.router import router as filesource_router
-from app.filesource.scanner import start_filesource_scanner, stop_filesource_scanner
+from app.filesource.scanner import register_filesource_scan_job
 from app.core.hash_database import init_hash_db
 from app.core.logging import logger
 from app.core.scheduler import start_scheduler, stop_scheduler
@@ -77,18 +77,15 @@ async def lifespan(app: FastAPI):
     logger.info(f"Starting background scheduler for {settings.SYNC_INTERVAL_SECONDS} seconds interval...")
     start_scheduler()
 
-    # Start file-source auto-scan scheduler (independent module)
-    logger.info("Starting file-source auto-scan scheduler...")
-    start_filesource_scanner()
+    # Register file-source scan on the SAME scheduler and interval
+    logger.info("Registering file-source auto-scan job...")
+    register_filesource_scan_job()
     
     yield
     # Shutdown
     logger.info("Shutting down...")
-
-    # Stop file-source auto-scan scheduler
-    stop_filesource_scanner()
     
-    # Stop the background scheduler
+    # Stop the background scheduler (stops all jobs including file-source scan)
     stop_scheduler()
     
     logger.info("Saving vector store to disk...")

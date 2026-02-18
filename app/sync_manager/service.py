@@ -114,21 +114,32 @@ class SyncManager:
 
     def update_interval(self, new_interval: int) -> Dict[str, Any]:
         """
-        Update the existing background scheduler's sync interval at runtime.
+        Update the sync interval for ALL scheduled scan jobs at runtime.
 
-        This uses APScheduler's ``reschedule_job`` API and does **not** modify
-        any source code or configuration file.
+        Reschedules both the BASE_DATA_FOLDER sync and the file-source
+        auto-scan so they stay on the same cadence.
         """
         from apscheduler.triggers.interval import IntervalTrigger
         from app.core.scheduler import scheduler as existing_scheduler
+        from app.filesource.scanner import FILESOURCE_JOB_ID
 
         old_interval = self.current_interval
 
         try:
+            new_trigger = IntervalTrigger(seconds=new_interval)
+
             existing_scheduler.reschedule_job(
                 "sync-data-folder-every-2-minutes",
-                trigger=IntervalTrigger(seconds=new_interval),
+                trigger=new_trigger,
             )
+
+            if existing_scheduler.get_job(FILESOURCE_JOB_ID):
+                existing_scheduler.reschedule_job(
+                    FILESOURCE_JOB_ID,
+                    trigger=IntervalTrigger(seconds=new_interval),
+                )
+                logger.info(f"[SYNC_MANAGER] File-source scan also rescheduled to {new_interval}s")
+
             self._current_interval = new_interval
             logger.info(
                 f"[SYNC_MANAGER] Background interval changed: {old_interval}s -> {new_interval}s"
