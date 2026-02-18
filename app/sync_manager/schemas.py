@@ -36,7 +36,7 @@ class UpdateIntervalRequest(BaseModel):
 
     interval_seconds: int = Field(
         ...,
-        gt=29,
+        gt=1,
         le=86400,
         description="New sync interval in seconds (min: 30, max: 86400)",
     )
