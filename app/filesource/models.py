@@ -44,6 +44,7 @@ class FileSourceConfig(SQLModel, table=True):
     # Operational state
     is_enabled: bool = Field(default=True)
     sync_to_base_folder: bool = Field(default=True)
+    auto_scan_enabled: bool = Field(default=False)
 
     # Audit / status
     created_at: datetime = Field(default_factory=datetime.utcnow)

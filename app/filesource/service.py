@@ -57,6 +57,7 @@ def _to_safe_response(src: FileSourceConfig) -> Dict[str, Any]:
         "max_retries": src.max_retries,
         "is_enabled": src.is_enabled,
         "sync_to_base_folder": src.sync_to_base_folder,
+        "auto_scan_enabled": src.auto_scan_enabled,
         "created_at": src.created_at.isoformat() if src.created_at else "",
         "updated_at": src.updated_at.isoformat() if src.updated_at else "",
         "last_tested_at": src.last_tested_at.isoformat() if src.last_tested_at else None,
@@ -115,6 +116,7 @@ def create_source(data: Dict[str, Any]) -> Dict[str, Any]:
             max_retries=data.get("max_retries", 3),
             is_enabled=data.get("is_enabled", True),
             sync_to_base_folder=data.get("sync_to_base_folder", True),
+            auto_scan_enabled=data.get("auto_scan_enabled", False),
             created_at=now,
             updated_at=now,
         )
@@ -142,6 +144,7 @@ def update_source(source_id: int, data: Dict[str, Any]) -> Dict[str, Any]:
             "name", "description", "protocol", "host", "port", "base_path",
             "share_name", "domain", "auth_type", "username", "key_file_path",
             "timeout_seconds", "max_retries", "is_enabled", "sync_to_base_folder",
+            "auto_scan_enabled",
         ):
             if field in data and data[field] is not None:
                 setattr(src, field, data[field])

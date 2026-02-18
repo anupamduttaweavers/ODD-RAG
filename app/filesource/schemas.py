@@ -28,6 +28,7 @@ class CreateFileSourceRequest(BaseModel):
     max_retries: int = Field(default=3, ge=0, le=10)
     is_enabled: bool = Field(default=True)
     sync_to_base_folder: bool = Field(default=True)
+    auto_scan_enabled: bool = Field(default=False)
 
     @field_validator("protocol")
     @classmethod
@@ -81,6 +82,7 @@ class UpdateFileSourceRequest(BaseModel):
     max_retries: Optional[int] = Field(default=None, ge=0, le=10)
     is_enabled: Optional[bool] = None
     sync_to_base_folder: Optional[bool] = None
+    auto_scan_enabled: Optional[bool] = None
 
     @field_validator("protocol")
     @classmethod
@@ -135,6 +137,7 @@ class FileSourceResponse(BaseModel):
     max_retries: int
     is_enabled: bool
     sync_to_base_folder: bool
+    auto_scan_enabled: bool = False
     created_at: str
     updated_at: str
     last_tested_at: Optional[str] = None

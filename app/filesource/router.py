@@ -12,6 +12,7 @@ Endpoints:
     DELETE /{source_id}      — Delete a source
     POST   /{source_id}/test — Test connection
     POST   /{source_id}/pull — Pull files to BASE_DATA_FOLDER
+    POST   /{source_id}/scan — Scan and vectorize directly (no copy)
 """
 
 import logging
@@ -21,6 +22,7 @@ from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import JSONResponse
 
 from app.filesource import service
+from app.filesource.scanner import scan_and_vectorize
 from app.filesource.schemas import (
     CreateFileSourceRequest,
     UpdateFileSourceRequest,
@@ -171,7 +173,7 @@ async def test_file_source(source_id: int):
 
 @router.post(
     "/{source_id}/pull",
-    summary="Pull files from source",
+    summary="Pull files from source (copies to BASE_DATA_FOLDER)",
     description="Download documents from the remote source into "
     "BASE_DATA_FOLDER/<source_name>/.  The existing sync mechanism "
     "will then detect and vectorize them automatically.",
@@ -184,4 +186,26 @@ async def pull_files(source_id: int):
         return JSONResponse(content=result, status_code=code)
     except Exception as exc:
         logger.error("[FILESOURCE_API] Pull error: %s", exc, exc_info=True)
+        return _err(f"Internal error: {exc}", "INTERNAL", status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ── Direct scan and vectorize ─────────────────────────────
+
+
+@router.post(
+    "/{source_id}/scan",
+    summary="Scan and vectorize directly (no copy)",
+    description="Read files directly from the source path and vectorize them "
+    "into FAISS without copying to BASE_DATA_FOLDER.  For local/NFS/mounted "
+    "paths the files are read in-place.  For SFTP/FTP/SMB a temporary "
+    "download is used and cleaned up after processing.",
+)
+async def scan_source(source_id: int):
+    logger.info("[FILESOURCE_API] Direct scan id=%s", source_id)
+    try:
+        result = await scan_and_vectorize(source_id)
+        code = status.HTTP_200_OK if result["success"] else status.HTTP_500_INTERNAL_SERVER_ERROR
+        return JSONResponse(content=result, status_code=code)
+    except Exception as exc:
+        logger.error("[FILESOURCE_API] Scan error: %s", exc, exc_info=True)
         return _err(f"Internal error: {exc}", "INTERNAL", status.HTTP_500_INTERNAL_SERVER_ERROR)

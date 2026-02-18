@@ -30,8 +30,25 @@ def init_filesource_db() -> None:
         return
     from app.filesource.models import FileSourceConfig  # noqa: F401
     SQLModel.metadata.create_all(engine)
+    _migrate_add_columns()
     _initialized = True
     logger.info("[FILESOURCE] Database initialised")
+
+
+def _migrate_add_columns() -> None:
+    """Add columns introduced after the initial schema (safe to re-run)."""
+    import sqlite3
+    conn = sqlite3.connect(_FILESOURCE_DB_URL.replace("sqlite:///", ""))
+    try:
+        conn.execute(
+            "ALTER TABLE file_source_config ADD COLUMN auto_scan_enabled BOOLEAN DEFAULT 0"
+        )
+        conn.commit()
+        logger.info("[FILESOURCE] Migrated: added auto_scan_enabled column")
+    except sqlite3.OperationalError:
+        pass
+    finally:
+        conn.close()
 
 
 def get_session() -> Session:

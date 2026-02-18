@@ -62,7 +62,8 @@ function renderTable() {
         html += '<td class="actions-cell">';
         html += '<button class="btn btn-sm btn-outline" onclick="openEdit(' + s.id + ')">Edit</button>';
         html += '<button class="btn btn-sm btn-success" onclick="testConn(' + s.id + ')">Test</button>';
-        html += '<button class="btn btn-sm btn-warning" onclick="pullFiles(' + s.id + ')">Pull</button>';
+        html += '<button class="btn btn-sm btn-primary" onclick="scanSource(' + s.id + ')">Scan</button>';
+        html += '<button class="btn btn-sm btn-warning" onclick="pullFiles(' + s.id + ')">Pull&nbsp;Copy</button>';
         html += '<button class="btn btn-sm btn-danger" onclick="confirmDelete(' + s.id + ",\'" + esc(s.name) + "\')" + '">Del</button>';
         html += "</td>";
         html += "</tr>";
@@ -123,6 +124,7 @@ function openEdit(id) {
     document.getElementById("fRetries").value = src.max_retries;
     document.getElementById("fEnabled").checked = src.is_enabled;
     document.getElementById("fSyncBase").checked = src.sync_to_base_folder;
+    document.getElementById("fAutoScan").checked = src.auto_scan_enabled;
     openModal("Edit File Source");
     updateProtocolFields();
 }
@@ -156,6 +158,7 @@ async function saveSource() {
         max_retries: parseInt(form.fRetries.value) || 3,
         is_enabled: form.fEnabled.checked,
         sync_to_base_folder: form.fSyncBase.checked,
+        auto_scan_enabled: form.fAutoScan.checked,
     };
     if (form.fPassword.value) data.password = form.fPassword.value;
     if (form.fPassphrase.value) data.passphrase = form.fPassphrase.value;
@@ -264,6 +267,21 @@ async function pullFiles(id) {
         loadSources();
     } catch (e) {
         showToast("Pull failed: " + e.message, "error");
+    }
+}
+
+// ── Scan (direct vectorize, no copy) ──
+
+async function scanSource(id) {
+    showToast("Scanning and vectorizing directly...", "info");
+    try {
+        var res = await fetch(API + "/" + id + "/scan", {method: "POST"});
+        var body = await res.json();
+        var msg = (body.source_name || "") + ": " + body.message;
+        showToast(msg, body.success ? "success" : "error");
+        loadSources();
+    } catch (e) {
+        showToast("Scan failed: " + e.message, "error");
     }
 }
 
