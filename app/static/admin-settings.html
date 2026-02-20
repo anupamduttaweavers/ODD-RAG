@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Settings</title>
+    <link rel="stylesheet" href="/static/css/admin.css">
+    <style>
+        .settings-category { margin-bottom: 28px; }
+        .settings-category h3 {
+            font-size: 13px; text-transform: uppercase; letter-spacing: .6px;
+            color: var(--accent); margin-bottom: 12px; padding-bottom: 6px;
+            border-bottom: 2px solid var(--border);
+        }
+        .setting-row {
+            display: flex; gap: 16px; align-items: flex-start;
+            padding: 12px 0; border-bottom: 1px solid #edf2f7;
+        }
+        .setting-row:last-child { border-bottom: none; }
+        .setting-label { flex: 0 0 220px; }
+        .setting-label strong { font-size: 13px; display: block; margin-bottom: 2px; }
+        .setting-label small { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
+        .setting-input { flex: 1; }
+        .setting-input input, .setting-input textarea {
+            width: 100%; padding: 9px 12px; border: 2px solid var(--border);
+            border-radius: 8px; font-size: 13px; font-family: inherit;
+            transition: border-color .2s;
+        }
+        .setting-input input:focus, .setting-input textarea:focus {
+            outline: none; border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(102,126,234,.12);
+        }
+        .setting-input textarea { min-height: 100px; resize: vertical; font-family: 'Consolas','Monaco',monospace; font-size: 12px; }
+        .setting-input .hint {
+            font-size: 11px; color: var(--text-muted); margin-top: 4px;
+        }
+        .save-bar {
+            position: sticky; bottom: 0; background: #fff; padding: 16px 0;
+            border-top: 2px solid var(--border); display: flex;
+            justify-content: flex-end; gap: 12px; align-items: center;
+        }
+        .save-bar .status { font-size: 13px; color: var(--text-muted); }
+        .badge-category { font-size: 10px; padding: 2px 8px; border-radius: 10px; background: #edf2f7; color: var(--text-muted); margin-left: 8px; }
+    </style>
+</head>
+<body>
+    <div class="top-bar">
+        <div>
+            <h1>Runtime Settings</h1>
+            <div class="subtitle">Configure retrieval, prompts, LLM, and processing parameters</div>
+        </div>
+        <div class="nav-links">
+            <a href="/chat">Chat</a>
+            <a href="/chat/admin/sync">Sync Admin</a>
+            <a href="/chat/admin/filesource">File Sources</a>
+            <a href="/chat/admin/users">Users</a>
+            <a href="/chat/admin/logs">Logs</a>
+            <a href="/docs">API Docs</a>
+            <span id="adminUserBadge"></span>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="card full" id="settingsCard">
+            <p style="text-align:center;padding:30px;color:var(--text-muted)">Loading settings...</p>
+        </div>
+        <div class="save-bar">
+            <span class="status" id="saveStatus"></span>
+            <button class="btn btn-primary" id="btnSave" onclick="saveSettings()">Save All Changes</button>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script src="/static/js/admin-auth.js"></script>
+    <script>
+    "use strict";
+
+    var SETTINGS_API = "/chat/admin/api/settings";
+    var allSettings = [];
+
+    var CATEGORY_ORDER = ["retrieval", "llm", "processing", "prompts", "sync"];
+    var CATEGORY_LABELS = {
+        retrieval: "Retrieval & Search",
+        llm: "LLM Configuration",
+        processing: "Document Processing",
+        prompts: "System Prompts",
+        sync: "Synchronization",
+        general: "General",
+    };
+
+    function showToast(msg, type) {
+        var t = document.getElementById("toast");
+        t.textContent = msg;
+        t.className = "toast toast-" + type + " show";
+        clearTimeout(t._timer);
+        t._timer = setTimeout(function () { t.classList.remove("show"); }, 4000);
+    }
+
+    async function loadSettings() {
+        try {
+            var res = await ADMIN_AUTH.adminFetch(SETTINGS_API);
+            if (!res.ok) throw new Error("Failed");
+            var data = await res.json();
+            allSettings = data.settings || [];
+            renderSettings();
+        } catch (e) { console.error(e); }
+    }
+
+    function renderSettings() {
+        var grouped = {};
+        allSettings.forEach(function (s) {
+            var cat = s.category || "general";
+            if (!grouped[cat]) grouped[cat] = [];
+            grouped[cat].push(s);
+        });
+
+        var html = "";
+        CATEGORY_ORDER.forEach(function (cat) {
+            var items = grouped[cat];
+            if (!items) return;
+            html += '<div class="settings-category">';
+            html += '<h3>' + (CATEGORY_LABELS[cat] || cat) + '</h3>';
+            items.forEach(function (s) {
+                html += '<div class="setting-row">';
+                html += '<div class="setting-label"><strong>' + esc(s.label || s.key) + '</strong>';
+                html += '<small>' + esc(s.description) + '</small></div>';
+                html += '<div class="setting-input">';
+                if (s.value_type === "text") {
+                    html += '<textarea id="s_' + s.key + '" data-key="' + s.key + '">' + esc(s.value) + '</textarea>';
+                } else {
+                    var type = s.value_type === "int" ? "number" : "text";
+                    html += '<input type="' + type + '" id="s_' + s.key + '" data-key="' + s.key + '" value="' + esc(s.value) + '">';
+                }
+                html += '<div class="hint">Key: <code>' + s.key + '</code>';
+                if (s.updated_by && s.updated_by !== "system") {
+                    html += ' &middot; Last changed by <strong>' + esc(s.updated_by) + '</strong>';
+                }
+                html += '</div></div></div>';
+            });
+            html += '</div>';
+        });
+
+        Object.keys(grouped).forEach(function (cat) {
+            if (CATEGORY_ORDER.indexOf(cat) === -1) {
+                var items = grouped[cat];
+                html += '<div class="settings-category"><h3>' + (CATEGORY_LABELS[cat] || cat) + '</h3>';
+                items.forEach(function (s) {
+                    html += '<div class="setting-row"><div class="setting-label"><strong>' + esc(s.label || s.key) + '</strong>';
+                    html += '<small>' + esc(s.description) + '</small></div>';
+                    html += '<div class="setting-input"><input type="text" id="s_' + s.key + '" data-key="' + s.key + '" value="' + esc(s.value) + '">';
+                    html += '</div></div>';
+                });
+                html += '</div>';
+            }
+        });
+
+        document.getElementById("settingsCard").innerHTML = html || '<p style="text-align:center;padding:30px;color:var(--text-muted)">No settings found.</p>';
+    }
+
+    function esc(s) {
+        if (!s) return "";
+        var d = document.createElement("div"); d.textContent = s; return d.innerHTML;
+    }
+
+    async function saveSettings() {
+        var btn = document.getElementById("btnSave");
+        var status = document.getElementById("saveStatus");
+        btn.disabled = true; btn.textContent = "Saving...";
+        status.textContent = "";
+
+        var updates = {};
+        allSettings.forEach(function (s) {
+            var el = document.getElementById("s_" + s.key);
+            if (!el) return;
+            var newVal = el.value;
+            if (newVal !== s.value) {
+                updates[s.key] = newVal;
+            }
+        });
+
+        if (Object.keys(updates).length === 0) {
+            showToast("No changes to save", "info");
+            btn.disabled = false; btn.textContent = "Save All Changes";
+            return;
+        }
+
+        try {
+            var res = await ADMIN_AUTH.adminFetch(SETTINGS_API, {
+                method: "PUT",
+                body: JSON.stringify({ settings: updates }),
+            });
+            var data = await res.json();
+            if (!res.ok) throw new Error(data.message || "Save failed");
+            showToast(data.message, "success");
+            status.textContent = Object.keys(updates).length + " setting(s) saved";
+            loadSettings();
+        } catch (e) {
+            showToast(e.message, "error");
+        } finally {
+            btn.disabled = false; btn.textContent = "Save All Changes";
+        }
+    }
+
+    setTimeout(loadSettings, 400);
+    </script>
+</body>
+</html>

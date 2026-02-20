@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Source Configuration</title>
+    <link rel="stylesheet" href="/static/css/filesource-admin.css">
+</head>
+<body>
+
+<div class="top-bar">
+    <div>
+        <h1>File Source Configuration</h1>
+        <div class="subtitle">Manage local &amp; remote document sources</div>
+    </div>
+    <div class="nav-links">
+        <a href="/chat">Chat</a>
+        <a href="/chat/admin/sync">Sync Admin</a>
+        <a href="/chat/admin/users">Users</a>
+        <a href="/chat/admin/logs">Logs</a>
+        <a href="/chat/admin/settings">Settings</a>
+        <a href="/docs">API Docs</a>
+        <span id="adminUserBadge"></span>
+    </div>
+</div>
+
+<div class="container">
+    <div class="action-bar">
+        <h2>Configured Sources</h2>
+        <button class="btn btn-primary" onclick="openAdd()">+ Add Source</button>
+    </div>
+
+    <table class="source-table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Protocol</th>
+                <th>Host</th>
+                <th>Status</th>
+                <th>Enabled</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="sourceBody">
+            <tr><td colspan="6" class="empty-state"><p>Loading...</p></td></tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modalOverlay">
+    <div class="modal">
+        <div class="modal-header">
+            <h3 id="modalTitle">Add File Source</h3>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="sourceForm" onsubmit="event.preventDefault()">
+                <div class="form-section">
+                    <div class="form-section-title">General</div>
+                    <div class="form-row">
+                        <div class="form-group"><label for="fName">Name *</label><input id="fName" required></div>
+                        <div class="form-group"><label for="fProtocol">Protocol *</label>
+                            <select id="fProtocol" onchange="updateProtocolFields()">
+                                <option value="local">Local / Mounted</option>
+                                <option value="sftp">SFTP</option>
+                                <option value="smb">SMB / CIFS</option>
+                                <option value="nfs">NFS</option>
+                                <option value="ftp">FTP (Secure)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row single">
+                        <div class="form-group"><label for="fDescription">Description</label><input id="fDescription" placeholder="Optional description"></div>
+                    </div>
+                </div>
+                <div class="form-section">
+                    <div class="form-section-title">Connection</div>
+                    <div class="form-row">
+                        <div class="form-group" id="hostGroup"><label for="fHost">Host / IP</label><input id="fHost" placeholder="e.g. 192.168.1.100"></div>
+                        <div class="form-group" id="portGroup"><label for="fPort">Port</label><input id="fPort" type="number" placeholder="Auto"></div>
+                    </div>
+                    <div class="form-row single">
+                        <div class="form-group"><label for="fBasePath">Base Path *</label><input id="fBasePath" required placeholder="/path/to/documents"></div>
+                    </div>
+                    <div id="smbFields" class="hidden">
+                        <div class="form-row">
+                            <div class="form-group"><label for="fShareName">SMB Share Name</label><input id="fShareName" placeholder="e.g. Documents"></div>
+                            <div class="form-group"><label for="fDomain">Domain</label><input id="fDomain" placeholder="Optional"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-section" id="authSection">
+                    <div class="form-section-title">Authentication</div>
+                    <div class="form-row">
+                        <div class="form-group"><label for="fAuthType">Auth Type</label>
+                            <select id="fAuthType">
+                                <option value="none">None</option>
+                                <option value="password">Password</option>
+                                <option value="key">Key File</option>
+                            </select>
+                        </div>
+                        <div class="form-group"><label for="fUsername">Username</label><input id="fUsername"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label for="fPassword">Password</label><input id="fPassword" type="password" placeholder="Leave blank to keep existing"></div>
+                        <div class="form-group"><label for="fKeyFilePath">Key File Path</label><input id="fKeyFilePath" placeholder="/path/to/key.pem"></div>
+                    </div>
+                    <div class="form-row single">
+                        <div class="form-group"><label for="fPassphrase">Key Passphrase</label><input id="fPassphrase" type="password" placeholder="Leave blank to keep existing"></div>
+                    </div>
+                </div>
+                <div class="form-section">
+                    <div class="form-section-title">Advanced</div>
+                    <div class="form-row">
+                        <div class="form-group"><label for="fTimeout">Timeout (s)</label><input id="fTimeout" type="number" value="30" min="5" max="300"></div>
+                        <div class="form-group"><label for="fRetries">Max Retries</label><input id="fRetries" type="number" value="3" min="0" max="10"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label><input type="checkbox" id="fEnabled" checked> Enabled</label></div>
+                        <div class="form-group"><label><input type="checkbox" id="fAutoScan"> Auto-Scan (scheduled)</label></div>
+                    </div>
+                    <div class="form-row single">
+                        <div class="form-group"><label><input type="checkbox" id="fSyncBase" checked> Pull copies to Base Data Folder (only for Pull Copy action)</label></div>
+                    </div>
+                </div>
+                <div class="inline-result" id="testResultBox" style="display:none;"></div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="testFromModal()">Test Connection</button>
+            <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="saveSource()">Save</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/static/js/admin-auth.js"></script>
+<script src="/static/js/admin-filesource.js"></script>
+</body>
+</html>

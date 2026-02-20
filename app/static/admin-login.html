@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Login</title>
+    <link rel="stylesheet" href="/static/css/admin-login.css">
+</head>
+<body>
+    <div class="login-card">
+        <h1>Admin Login</h1>
+        <div class="subtitle">Semantic Document Discovery</div>
+
+        <div class="error-msg" id="errorMsg"></div>
+
+        <form id="loginForm" autocomplete="on">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" required autofocus>
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            <button type="submit" class="btn-login" id="btnLogin">Sign In</button>
+        </form>
+
+        <div class="back-link"><a href="/chat">Back to Chat</a></div>
+    </div>
+
+    <script>
+    "use strict";
+    (function () {
+        var form = document.getElementById("loginForm");
+        var errBox = document.getElementById("errorMsg");
+        var btn = document.getElementById("btnLogin");
+        var nextUrl = new URLSearchParams(location.search).get("next") || "/chat/admin/sync";
+
+        var existingToken = localStorage.getItem("admin_token");
+        if (existingToken) {
+            fetch("/chat/admin/api/auth/me", {
+                headers: { "Authorization": "Bearer " + existingToken }
+            }).then(function (res) {
+                if (res.ok) {
+                    location.href = nextUrl;
+                } else {
+                    localStorage.removeItem("admin_token");
+                }
+            }).catch(function () {
+                localStorage.removeItem("admin_token");
+            });
+        }
+
+        form.addEventListener("submit", async function (e) {
+            e.preventDefault();
+            errBox.classList.remove("visible");
+            btn.disabled = true;
+            btn.textContent = "Signing in\u2026";
+
+            try {
+                var res = await fetch("/chat/admin/api/auth/login", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        username: document.getElementById("username").value.trim(),
+                        password: document.getElementById("password").value,
+                    }),
+                });
+                var data = await res.json();
+                if (!res.ok) {
+                    throw new Error((data.detail && data.detail.message) || data.message || "Login failed");
+                }
+                localStorage.setItem("admin_token", data.access_token);
+                location.href = nextUrl;
+            } catch (err) {
+                errBox.textContent = err.message;
+                errBox.classList.add("visible");
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "Sign In";
+            }
+        });
+    })();
+    </script>
+</body>
+</html>

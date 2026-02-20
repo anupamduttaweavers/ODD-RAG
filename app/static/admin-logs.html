@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Activity Logs</title>
+    <link rel="stylesheet" href="/static/css/admin.css">
+    <style>
+        table { width:100%; border-collapse:collapse; font-size:13px; }
+        th, td { padding:10px 14px; text-align:left; border-bottom:1px solid var(--border); }
+        th { font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--text-muted); background:#f7fafc; }
+        .filters { display:flex; gap:12px; align-items:flex-end; margin-bottom:16px; flex-wrap:wrap; }
+        .filters .form-group { margin-bottom:0; }
+        .filters input, .filters select { padding:8px 10px; border:2px solid var(--border); border-radius:8px; font-size:13px; font-family:inherit; }
+        .filters input:focus, .filters select:focus { outline:none; border-color:var(--primary); }
+        .pagination { display:flex; justify-content:center; align-items:center; gap:12px; margin-top:18px; font-size:13px; color:var(--text-muted); }
+        .pagination button { padding:6px 14px; }
+        .action-badge { display:inline-block; padding:2px 8px; border-radius:12px; font-size:11px; font-weight:600; }
+        .action-LOGIN { background:#f0fff4; color:#276749; }
+        .action-LOGIN_FAILED { background:#fff5f5; color:#c53030; }
+        .action-LOGOUT { background:#ebf8ff; color:#3182ce; }
+        .action-CREATE_USER { background:#fefcbf; color:#b7791f; }
+        .action-UPDATE_USER { background:#e9d8fd; color:#553c9a; }
+        .action-DEACTIVATE_USER { background:#fff5f5; color:#c53030; }
+        .detail-cell { max-width:300px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-family:monospace; font-size:12px; color:var(--text-muted); }
+    </style>
+</head>
+<body>
+    <div class="top-bar">
+        <div>
+            <h1>Admin Activity Logs</h1>
+            <div class="subtitle">Audit trail of all admin actions</div>
+        </div>
+        <div class="nav-links">
+            <a href="/chat">Chat</a>
+            <a href="/chat/admin/sync">Sync Admin</a>
+            <a href="/chat/admin/filesource">File Sources</a>
+            <a href="/chat/admin/users">Users</a>
+            <a href="/chat/admin/settings">Settings</a>
+            <a href="/docs">API Docs</a>
+            <span id="adminUserBadge"></span>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="filters">
+            <div class="form-group">
+                <label>Username</label>
+                <input id="filterUser" placeholder="All users">
+            </div>
+            <div class="form-group">
+                <label>Action</label>
+                <select id="filterAction">
+                    <option value="">All actions</option>
+                    <option>LOGIN</option>
+                    <option>LOGIN_FAILED</option>
+                    <option>LOGOUT</option>
+                    <option>CREATE_USER</option>
+                    <option>UPDATE_USER</option>
+                    <option>DEACTIVATE_USER</option>
+                </select>
+            </div>
+            <button class="btn btn-primary" onclick="currentPage=1;loadLogs()">Filter</button>
+            <button class="btn" style="background:var(--border);color:var(--text);" onclick="document.getElementById('filterUser').value='';document.getElementById('filterAction').value='';currentPage=1;loadLogs();">Clear</button>
+        </div>
+
+        <div class="card full" style="padding:0; overflow:hidden;">
+            <table>
+                <thead>
+                    <tr><th>Timestamp</th><th>Username</th><th>Action</th><th>Detail</th><th>IP Address</th></tr>
+                </thead>
+                <tbody id="logsBody">
+                    <tr><td colspan="5" style="text-align:center;padding:30px;color:var(--text-muted)">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="pagination">
+            <button class="btn" style="background:var(--border);color:var(--text);" id="btnPrev" onclick="prevPage()" disabled>Previous</button>
+            <span id="pageInfo">Page 1</span>
+            <button class="btn btn-primary" id="btnNext" onclick="nextPage()">Next</button>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script src="/static/js/admin-auth.js"></script>
+    <script>
+    "use strict";
+
+    var LOGS_API = "/chat/admin/api/logs";
+    var currentPage = 1;
+    var pageSize = 30;
+    var totalLogs = 0;
+
+    async function loadLogs() {
+        var user = document.getElementById("filterUser").value.trim();
+        var action = document.getElementById("filterAction").value;
+        var url = LOGS_API + "?page=" + currentPage + "&page_size=" + pageSize;
+        if (user) url += "&username=" + encodeURIComponent(user);
+        if (action) url += "&action=" + encodeURIComponent(action);
+
+        try {
+            var res = await ADMIN_AUTH.adminFetch(url);
+            if (!res.ok) throw new Error("Failed");
+            var data = await res.json();
+            totalLogs = data.total;
+            renderLogs(data.logs || []);
+            updatePagination();
+        } catch (e) { console.error(e); }
+    }
+
+    function renderLogs(logs) {
+        var tbody = document.getElementById("logsBody");
+        if (!logs.length) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:30px;color:var(--text-muted)">No logs found.</td></tr>';
+            return;
+        }
+        var html = "";
+        logs.forEach(function (l) {
+            html += "<tr>";
+            html += "<td>" + new Date(l.timestamp).toLocaleString() + "</td>";
+            html += "<td><strong>" + l.username + "</strong></td>";
+            html += '<td><span class="action-badge action-' + l.action + '">' + l.action + "</span></td>";
+            html += '<td class="detail-cell" title="' + (l.detail || "").replace(/"/g, "&quot;") + '">' + (l.detail || "\u2014") + "</td>";
+            html += "<td>" + (l.ip_address || "\u2014") + "</td>";
+            html += "</tr>";
+        });
+        tbody.innerHTML = html;
+    }
+
+    function updatePagination() {
+        var totalPages = Math.ceil(totalLogs / pageSize) || 1;
+        document.getElementById("pageInfo").textContent = "Page " + currentPage + " of " + totalPages + " (" + totalLogs + " total)";
+        document.getElementById("btnPrev").disabled = currentPage <= 1;
+        document.getElementById("btnNext").disabled = currentPage >= totalPages;
+    }
+
+    function prevPage() { if (currentPage > 1) { currentPage--; loadLogs(); } }
+    function nextPage() { currentPage++; loadLogs(); }
+
+    setTimeout(loadLogs, 500);
+    </script>
+</body>
+</html>

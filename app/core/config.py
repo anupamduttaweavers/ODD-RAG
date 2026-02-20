@@ -62,4 +62,11 @@ class Settings(BaseSettings):
     DEFAULT_CHUNK_OVERLAP: int = 200
     DEFAULT_LINES_PER_PAGE: int = 50
 
+    # Admin Authentication
+    ADMIN_SUPERUSER_USERNAME: str = "admin"
+    ADMIN_SUPERUSER_PASSWORD: str = "Admin@12345"
+    ADMIN_JWT_SECRET_KEY: str = "admin-super-secret-key-change-in-production"
+    ADMIN_TOKEN_EXPIRE_MINUTES: int = 60
+    ADMIN_DB_URL: str = "sqlite:///./admin.db"
+
 settings = Settings()

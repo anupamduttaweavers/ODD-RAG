@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sync Admin Panel</title>
+    <link rel="stylesheet" href="/static/css/admin.css">
+</head>
+
+<body>
+    <div class="top-bar">
+        <div>
+            <h1>Sync Administration Panel</h1>
+            <div class="subtitle">Manage document synchronization &mdash; All times in IST (UTC+05:30)</div>
+        </div>
+        <div class="nav-links">
+            <a href="/chat">Chat</a>
+            <a href="/chat/admin/filesource">File Sources</a>
+            <a href="/chat/admin/users">Users</a>
+            <a href="/chat/admin/logs">Logs</a>
+            <a href="/chat/admin/settings">Settings</a>
+            <a href="/docs">API Docs</a>
+            <span id="adminUserBadge"></span>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="grid">
+            <div class="card full">
+                <h2>Sync Status</h2>
+                <div class="status-grid">
+                    <div class="status-item">
+                        <div class="label">Current Status</div>
+                        <div class="value" id="statusBadge"><span class="badge badge-idle">IDLE</span></div>
+                    </div>
+                    <div class="status-item">
+                        <div class="label">Sync Interval</div>
+                        <div class="value" id="intervalValue">&mdash;</div>
+                    </div>
+                    <div class="status-item">
+                        <div class="label">Next Auto Sync (IST)</div>
+                        <div class="value" id="nextAutoSync">&mdash;</div>
+                    </div>
+                    <div class="status-item">
+                        <div class="label">Next Scheduled Sync (IST)</div>
+                        <div class="value" id="nextScheduledSync">&mdash;</div>
+                    </div>
+                    <div class="status-item">
+                        <div class="label">Syncs Completed</div>
+                        <div class="value" id="syncsCompleted">0</div>
+                    </div>
+                    <div class="status-item">
+                        <div class="label">Syncs Failed</div>
+                        <div class="value" id="syncsFailed">0</div>
+                    </div>
+                </div>
+                <div class="refresh-indicator">Auto-refreshes every 5 seconds &bull; <a href="#" onclick="refreshStatus(); return false;">Refresh now</a></div>
+            </div>
+
+            <div class="card">
+                <h2>Force Sync</h2>
+                <p class="info-text">
+                    Trigger an immediate full synchronization cycle.
+                    Scans the data folder, processes new files, removes deleted files,
+                    and updates the vector store.
+                </p>
+                <button class="btn btn-primary" id="btnForceSync" onclick="forceSync()">
+                    Force Sync Now
+                </button>
+                <div class="result-box" id="forceSyncResult"></div>
+            </div>
+
+            <div class="card">
+                <h2>Failsafe Sync</h2>
+                <p class="info-text">
+                    Robust sync with automatic retry (3 attempts, exponential backoff)
+                    and a registry-only fallback if all attempts fail.
+                </p>
+                <button class="btn btn-warning" id="btnFailsafe" onclick="failsafeSync()">
+                    Failsafe Sync
+                </button>
+                <div class="result-box" id="failsafeResult"></div>
+            </div>
+
+            <div class="card">
+                <h2>Schedule Sync</h2>
+                <p class="info-text">
+                    Schedule a one-time sync at a future IST datetime. Any previously
+                    scheduled sync will be replaced.
+                </p>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="scheduleInput">Date &amp; Time (IST)</label>
+                        <input type="datetime-local" id="scheduleInput" step="1">
+                    </div>
+                    <button class="btn btn-success" id="btnSchedule" onclick="scheduleSync()">
+                        Schedule
+                    </button>
+                </div>
+                <div class="result-box" id="scheduleResult"></div>
+            </div>
+
+            <div class="card">
+                <h2>Adjust Interval</h2>
+                <p class="info-text">
+                    Change how often the background auto-sync runs.
+                    Minimum 1 seconds, maximum 86 400 seconds (24 hours).
+                </p>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="intervalInput">Interval (seconds)</label>
+                        <input type="number" id="intervalInput" min="1" max="86400" placeholder="e.g. 120">
+                    </div>
+                    <button class="btn btn-primary" id="btnInterval" onclick="updateInterval()">
+                        Update
+                    </button>
+                </div>
+                <div class="result-box" id="intervalResult"></div>
+            </div>
+
+            <div class="card full">
+                <h2>Last Sync Result</h2>
+                <div class="result-box visible" id="lastSyncResult" style="display:block;">Waiting for status data...</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script src="/static/js/admin-auth.js"></script>
+    <script src="/static/js/admin-sync.js"></script>
+</body>
+
+</html>

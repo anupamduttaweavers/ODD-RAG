@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{STATUS_CODE}} — {{TITLE}}</title>
+    <style>
+        :root {
+            --primary: #667eea;
+            --accent: #764ba2;
+            --text: #2d3748;
+            --text-muted: #718096;
+            --bg: #f7fafc;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .error-container {
+            text-align: center;
+            padding: 40px 30px;
+            max-width: 520px;
+        }
+        .error-code {
+            font-size: 100px;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1;
+            margin-bottom: 8px;
+        }
+        .error-title {
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+        .error-message {
+            font-size: 14px;
+            color: var(--text-muted);
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+        .error-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .btn {
+            padding: 10px 22px;
+            border: none;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s;
+            display: inline-block;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            color: #fff;
+        }
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 14px rgba(102, 126, 234, 0.4);
+        }
+        .btn-outline {
+            background: #fff;
+            color: var(--text);
+            border: 2px solid #e2e8f0;
+        }
+        .btn-outline:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+        .path-info {
+            margin-top: 24px;
+            font-size: 12px;
+            color: var(--text-muted);
+            background: #edf2f7;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <div class="error-code">{{STATUS_CODE}}</div>
+        <div class="error-title">{{TITLE}}</div>
+        <div class="error-message">{{MESSAGE}}</div>
+        <div class="error-actions">
+            <a href="/chat" class="btn btn-primary">Go to Chat</a>
+            <a href="/" class="btn btn-outline">Home</a>
+            <a href="javascript:history.back()" class="btn btn-outline">Go Back</a>
+        </div>
+        <div class="path-info">{{PATH}}</div>
+    </div>
+</body>
+</html>

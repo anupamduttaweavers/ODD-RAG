@@ -1,3 +1,31 @@
+def get_prompt(name: str) -> str:
+    """Return the prompt text for *name*, preferring admin-overridden value.
+
+    Falls back to the built-in default if the runtime setting is empty.
+    """
+    from app.admin.runtime_config import rc
+
+    _KEY_MAP = {
+        "query_generator": "prompt_query_generator",
+        "answer_format": "prompt_answer_format",
+        "flow_decision": "prompt_flow_decision",
+        "greeting": "prompt_greeting",
+    }
+    _DEFAULT_MAP = {
+        "query_generator": RAG_QUERY_GENETATOR_PROMPT,
+        "answer_format": ANSWER_FORMAT,
+        "flow_decision": FLOW_DECISION_PROMPT,
+        "greeting": GREETINGS_PROMPT,
+    }
+
+    rc_key = _KEY_MAP.get(name)
+    if rc_key:
+        override = rc.get(rc_key, "")
+        if override.strip():
+            return override
+    return _DEFAULT_MAP.get(name, "")
+
+
 RAG_QUERY_GENETATOR_PROMPT = """You are a query generator for a cosine-similarity RAG system.
 
 Given a user input, generate ONE minimal keyword-based search query optimized for vector retrieval.

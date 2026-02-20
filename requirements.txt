@@ -30,6 +30,7 @@ python-dotenv
 # Security
 python-jose[cryptography]
 passlib[bcrypt]
+argon2-cffi
 
 # CORS
 python-multipart

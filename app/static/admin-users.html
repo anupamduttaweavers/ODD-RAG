@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Users</title>
+    <link rel="stylesheet" href="/static/css/admin.css">
+    <style>
+        table { width:100%; border-collapse:collapse; font-size:13px; }
+        th, td { padding:10px 14px; text-align:left; border-bottom:1px solid var(--border); }
+        th { font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--text-muted); background:#f7fafc; }
+        .badge-superadmin { background:#fefcbf; color:#b7791f; }
+        .badge-admin { background:#ebf8ff; color:#3182ce; }
+        .badge-active { background:#f0fff4; color:#276749; }
+        .badge-inactive { background:#fff5f5; color:#c53030; }
+        .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.45); display:none; align-items:center; justify-content:center; z-index:1000; }
+        .modal-overlay.open { display:flex; }
+        .modal { background:#fff; border-radius:var(--radius); width:100%; max-width:420px; box-shadow:0 20px 60px rgba(0,0,0,.2); }
+        .modal-header { padding:18px 24px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
+        .modal-header h3 { font-size:16px; }
+        .modal-close { background:none; border:none; font-size:22px; cursor:pointer; color:var(--text-muted); }
+        .modal-body { padding:20px 24px; }
+        .modal-footer { padding:14px 24px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:10px; }
+        .form-group select { width:100%; padding:10px 12px; border:2px solid var(--border); border-radius:8px; font-size:14px; font-family:inherit; }
+        .actions-cell { white-space:nowrap; }
+        .actions-cell .btn { margin-right:4px; padding:6px 12px; font-size:12px; }
+        .access-denied { text-align:center; padding:60px 20px; color:var(--text-muted); }
+    </style>
+</head>
+<body>
+    <div class="top-bar">
+        <div>
+            <h1>Admin User Management</h1>
+            <div class="subtitle">Create and manage admin accounts</div>
+        </div>
+        <div class="nav-links">
+            <a href="/chat">Chat</a>
+            <a href="/chat/admin/sync">Sync Admin</a>
+            <a href="/chat/admin/filesource">File Sources</a>
+            <a href="/chat/admin/logs">Logs</a>
+            <a href="/chat/admin/settings">Settings</a>
+            <a href="/docs">API Docs</a>
+            <span id="adminUserBadge"></span>
+        </div>
+    </div>
+
+    <div class="container">
+        <div id="usersSection">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <h2 style="font-size:15px; text-transform:uppercase; letter-spacing:.5px;">Users</h2>
+                <button class="btn btn-primary" onclick="openCreate()">+ Create User</button>
+            </div>
+            <div class="card full" style="padding:0; overflow:hidden;">
+                <table>
+                    <thead>
+                        <tr><th>Username</th><th>Role</th><th>Status</th><th>Created By</th><th>Created At</th><th>Actions</th></tr>
+                    </thead>
+                    <tbody id="usersBody">
+                        <tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-muted)">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create / Edit Modal -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modalTitle">Create User</h3>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="userForm" onsubmit="event.preventDefault()">
+                    <div class="form-group">
+                        <label for="fUsername">Username</label>
+                        <input id="fUsername" required minlength="3" maxlength="100">
+                    </div>
+                    <div class="form-group">
+                        <label for="fPassword">Password</label>
+                        <input id="fPassword" type="password" minlength="6">
+                    </div>
+                    <div class="form-group">
+                        <label for="fRole">Role</label>
+                        <select id="fRole">
+                            <option value="admin">Admin</option>
+                            <option value="superadmin">Superadmin</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModal()" style="background:none;border:2px solid var(--border);color:var(--text);">Cancel</button>
+                <button class="btn btn-primary" onclick="saveUser()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script src="/static/js/admin-auth.js"></script>
+    <script>
+    "use strict";
+
+    var USERS_API = "/chat/admin/api/users";
+    var editingId = null;
+
+    function showToast(msg, type) {
+        var t = document.getElementById("toast");
+        t.textContent = msg;
+        t.className = "toast toast-" + type + " show";
+        clearTimeout(t._timer);
+        t._timer = setTimeout(function () { t.classList.remove("show"); }, 4000);
+    }
+
+    function checkAccess() {
+        var check = setInterval(function () {
+            var u = ADMIN_AUTH.getUser();
+            if (!u) return;
+            clearInterval(check);
+            loadUsers();
+            updateRoleDropdown();
+        }, 200);
+    }
+
+    function updateRoleDropdown() {
+        var sel = document.getElementById("fRole");
+        var superOpt = sel.querySelector('option[value="superadmin"]');
+        if (!ADMIN_AUTH.isSuperadmin() && superOpt) {
+            superOpt.disabled = true;
+            superOpt.textContent = "Superadmin (requires superadmin)";
+        }
+    }
+
+    async function loadUsers() {
+        try {
+            var res = await ADMIN_AUTH.adminFetch(USERS_API);
+            if (!res.ok) throw new Error("Failed");
+            var data = await res.json();
+            renderUsers(data.users || []);
+        } catch (e) { console.error(e); }
+    }
+
+    function renderUsers(users) {
+        var tbody = document.getElementById("usersBody");
+        if (!users.length) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-muted)">No users found.</td></tr>';
+            return;
+        }
+        var html = "";
+        users.forEach(function (u) {
+            var roleCls = u.role === "superadmin" ? "badge-superadmin" : "badge-admin";
+            var statusCls = u.is_active ? "badge-active" : "badge-inactive";
+            html += "<tr>";
+            html += "<td><strong>" + u.username + "</strong></td>";
+            html += '<td><span class="badge ' + roleCls + '">' + u.role.toUpperCase() + "</span></td>";
+            html += '<td><span class="badge ' + statusCls + '">' + (u.is_active ? "ACTIVE" : "INACTIVE") + "</span></td>";
+            html += "<td>" + u.created_by + "</td>";
+            html += "<td>" + new Date(u.created_at).toLocaleString() + "</td>";
+            html += '<td class="actions-cell">';
+            html += '<button class="btn btn-primary" onclick="openEdit(' + u.id + ",'" + u.username + "','" + u.role + "')" + '">Edit</button>';
+            if (u.is_active) {
+                html += '<button class="btn btn-danger" onclick="deactivateUser(' + u.id + ",'" + u.username + "')" + '">Deactivate</button>';
+            }
+            html += "</td></tr>";
+        });
+        tbody.innerHTML = html;
+    }
+
+    function openCreate() {
+        editingId = null;
+        document.getElementById("userForm").reset();
+        document.getElementById("fUsername").disabled = false;
+        document.getElementById("fPassword").required = true;
+        document.getElementById("fPassword").placeholder = "";
+        document.getElementById("modalTitle").textContent = "Create User";
+        document.getElementById("modalOverlay").classList.add("open");
+    }
+
+    function openEdit(id, username, role) {
+        editingId = id;
+        document.getElementById("fUsername").value = username;
+        document.getElementById("fUsername").disabled = true;
+        document.getElementById("fPassword").value = "";
+        document.getElementById("fPassword").required = false;
+        document.getElementById("fPassword").placeholder = "Leave blank to keep existing";
+        document.getElementById("fRole").value = role;
+        document.getElementById("modalTitle").textContent = "Edit User";
+        document.getElementById("modalOverlay").classList.add("open");
+    }
+
+    function closeModal() {
+        document.getElementById("modalOverlay").classList.remove("open");
+        editingId = null;
+    }
+
+    async function saveUser() {
+        if (editingId) {
+            var body = { role: document.getElementById("fRole").value };
+            var pw = document.getElementById("fPassword").value;
+            if (pw) body.password = pw;
+            try {
+                var res = await ADMIN_AUTH.adminFetch(USERS_API + "/" + editingId, { method: "PUT", body: JSON.stringify(body) });
+                if (!res.ok) { var err = await res.json(); throw new Error((err.detail && err.detail.message) || "Update failed"); }
+                showToast("User updated", "success"); closeModal(); loadUsers();
+            } catch (e) { showToast(e.message, "error"); }
+        } else {
+            var uname = document.getElementById("fUsername").value.trim();
+            var pass = document.getElementById("fPassword").value;
+            var role = document.getElementById("fRole").value;
+            if (!uname || !pass) { showToast("Username and password are required", "error"); return; }
+            try {
+                var res2 = await ADMIN_AUTH.adminFetch(USERS_API, { method: "POST", body: JSON.stringify({ username: uname, password: pass, role: role }) });
+                if (!res2.ok) { var err2 = await res2.json(); throw new Error((err2.detail && err2.detail.message) || "Create failed"); }
+                showToast("User created", "success"); closeModal(); loadUsers();
+            } catch (e) { showToast(e.message, "error"); }
+        }
+    }
+
+    async function deactivateUser(id, name) {
+        if (!confirm("Deactivate user '" + name + "'?")) return;
+        try {
+            var res = await ADMIN_AUTH.adminFetch(USERS_API + "/" + id, { method: "DELETE" });
+            if (!res.ok) throw new Error("Failed");
+            showToast("User deactivated", "success"); loadUsers();
+        } catch (e) { showToast(e.message, "error"); }
+    }
+
+    checkAccess();
+    </script>
+</body>
+</html>

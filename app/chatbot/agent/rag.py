@@ -4,9 +4,10 @@ from langgraph.graph import StateGraph, MessagesState, START, END
 from langchain.messages import SystemMessage, HumanMessage
 from langchain_core.documents import Document
 from typing_extensions import Annotated
-from app.chatbot.config.prompts import RAG_QUERY_GENETATOR_PROMPT, ANSWER_FORMAT, FLOW_DECISION_PROMPT, GREETINGS_PROMPT
+from app.chatbot.config.prompts import get_prompt
 from app.chatbot.agent.llm import model
 from app.vectorstore.operations import retrieve_similar
+from app.admin.runtime_config import rc
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +23,7 @@ graph_builder = StateGraph(RAGState)
 
 async def choose_paths(state: RAGState) -> bool:
     """Decide on the paths to take based on the user's query."""
-    # For simplicity, we always proceed with both intentions and document retrieval
-    system_prompt = SystemMessage(content=FLOW_DECISION_PROMPT)
+    system_prompt = SystemMessage(content=get_prompt("flow_decision"))
     user_message = HumanMessage(content=state["query"])
     response = await model.ainvoke([system_prompt, user_message])
     if "yes" in response.content.lower():
@@ -32,12 +32,11 @@ async def choose_paths(state: RAGState) -> bool:
         intention = "query"
     logger.info(f"Flow decision: {intention}")
     return True if intention == "greeting" else False
-    
 
 
 async def greeting(state: RAGState) -> RAGState:
     """Handle greeting intentions."""
-    system_prompt = SystemMessage(content=GREETINGS_PROMPT)
+    system_prompt = SystemMessage(content=get_prompt("greeting"))
     user_message = HumanMessage(content=state["query"])
     response = await model.ainvoke([system_prompt, user_message])
     state["final_answer"] = response.content
@@ -46,7 +45,7 @@ async def greeting(state: RAGState) -> RAGState:
 
 async def retrieve_intentions(state: RAGState) -> RAGState:
     """Retrieve user intentions based on the user's query."""
-    system_message = SystemMessage(content=RAG_QUERY_GENETATOR_PROMPT)
+    system_message = SystemMessage(content=get_prompt("query_generator"))
     user_message = HumanMessage(content=state["query"])
 
     response = await model.ainvoke([system_message, user_message])
@@ -59,15 +58,16 @@ async def retrieve_documents(state: RAGState) -> RAGState:
     """Retrieve relevant documents based on the user's query."""
     query = state.get("query_generated") or state["query"]
 
-    docs = await retrieve_similar(query, k=20)
-    logger.info(f"Retrieved {len(docs)} documents.")
+    k = rc.get_int("rag_retrieval_k", 20)
+    docs = await retrieve_similar(query, k=k)
+    logger.info(f"Retrieved {len(docs)} documents (k={k}).")
     state["retrieved_docs"] = docs
     return state
 
 
 async def generate_answer(state: RAGState) -> RAGState:
     """Generate an answer based on the user's query and retrieved documents."""
-    system_message = SystemMessage(content=ANSWER_FORMAT)
+    system_message = SystemMessage(content=get_prompt("answer_format"))
     context = "\n".join(
         [
             (
