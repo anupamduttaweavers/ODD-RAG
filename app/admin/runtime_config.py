@@ -108,13 +108,29 @@ _DEFAULTS: List[dict] = [
         "description": "Overlap characters between chunks (empty = use .env default)",
         "value_type": "int",
     },
-    # ── Prompts ──
+    # ── Prompts (Agentic RAG) ──
     {
-        "key": "prompt_query_generator",
+        "key": "prompt_system",
         "value": "",
         "category": "prompts",
-        "label": "Query Generator Prompt",
-        "description": "System prompt for RAG query generation (empty = use built-in default)",
+        "label": "System Prompt",
+        "description": "Main system prompt for the agentic RAG agent (empty = use built-in default)",
+        "value_type": "text",
+    },
+    {
+        "key": "prompt_grade_documents",
+        "value": "",
+        "category": "prompts",
+        "label": "Document Grading Prompt",
+        "description": "Prompt for document relevance grading (empty = use built-in default)",
+        "value_type": "text",
+    },
+    {
+        "key": "prompt_rewrite_question",
+        "value": "",
+        "category": "prompts",
+        "label": "Question Rewrite Prompt",
+        "description": "Prompt for query reformulation on poor retrieval (empty = use built-in default)",
         "value_type": "text",
     },
     {
@@ -125,20 +141,29 @@ _DEFAULTS: List[dict] = [
         "description": "System prompt for answer generation (empty = use built-in default)",
         "value_type": "text",
     },
+    # ── Legacy prompts (kept for backward compatibility) ──
+    {
+        "key": "prompt_query_generator",
+        "value": "",
+        "category": "prompts",
+        "label": "Query Generator Prompt (Legacy)",
+        "description": "Legacy: query generation prompt (empty = use built-in default)",
+        "value_type": "text",
+    },
     {
         "key": "prompt_flow_decision",
         "value": "",
         "category": "prompts",
-        "label": "Flow Decision Prompt",
-        "description": "System prompt for greeting vs query classification (empty = use built-in default)",
+        "label": "Flow Decision Prompt (Legacy)",
+        "description": "Legacy: greeting vs query classification (empty = use built-in default)",
         "value_type": "text",
     },
     {
         "key": "prompt_greeting",
         "value": "",
         "category": "prompts",
-        "label": "Greeting Prompt",
-        "description": "System prompt for greeting responses (empty = use built-in default)",
+        "label": "Greeting Prompt (Legacy)",
+        "description": "Legacy: greeting response prompt (empty = use built-in default)",
         "value_type": "text",
     },
     # ── Sync ──

@@ -69,4 +69,13 @@ class Settings(BaseSettings):
     ADMIN_TOKEN_EXPIRE_MINUTES: int = 60
     ADMIN_DB_URL: str = "sqlite:///./admin.db"
 
+    # Agentic RAG
+    MAX_QUERY_RETRIES: int = 2
+    CONVERSATION_DB_PATH: Path = BASE_DIR / "conversations.db"
+    LLM_TIMEOUT_SECONDS: int = 120
+    SUMMARY_MESSAGE_THRESHOLD: int = 10
+
+    # Long-term Memory (LangMem)
+    MEMORY_STORE_PATH: Path = BASE_DIR / "memory_store.json"
+
 settings = Settings()

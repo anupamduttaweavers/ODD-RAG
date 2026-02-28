@@ -131,6 +131,7 @@ var messagesContainer = document.getElementById("messagesContainer");
 var messageInput = document.getElementById("messageInput");
 var sendButton = document.getElementById("sendButton");
 var hasMessages = false;
+var currentThreadId = null;
 
 // Auto-resize textarea
 messageInput.addEventListener("input", function () {
@@ -179,7 +180,7 @@ function addLoadingIndicator() {
     var contentDiv = document.createElement("div");
     contentDiv.className = "loading-indicator";
     contentDiv.innerHTML =
-        '<span>Thinking</span>' +
+        '<span id="loadingStatusText">Thinking</span>' +
         '<span class="loading-dot"></span>' +
         '<span class="loading-dot"></span>' +
         '<span class="loading-dot"></span>';
@@ -188,6 +189,14 @@ function addLoadingIndicator() {
     messagesContainer.appendChild(messageDiv);
 
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+function updateLoadingStatus(text) {
+    var el = document.getElementById("loadingStatusText");
+    if (el) {
+        el.textContent = text;
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
 }
 
 function removeLoadingIndicator() {
@@ -210,31 +219,135 @@ async function sendMessage() {
 
     addLoadingIndicator();
 
+    var payload = { query: message };
+    if (currentThreadId) {
+        payload.thread_id = currentThreadId;
+    }
+
     try {
-        var response = await fetch("/api/v1/chatbot/chat", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ query: message }),
-        });
-
-        removeLoadingIndicator();
-
-        if (!response.ok) {
-            throw new Error("HTTP error! status: " + response.status);
+        var answered = await _sendStreaming(payload);
+        if (!answered) {
+            removeLoadingIndicator();
+            addMessage("Sorry, I could not process your request.", false);
         }
-
-        var data = await response.json();
-        var answer = data.answer || "Sorry, I could not process your request.";
-        addMessage(answer, false);
-    } catch (error) {
-        removeLoadingIndicator();
-        console.error("Error:", error);
-        addMessage("Sorry, there was an error processing your request. Please try again.", false);
+    } catch (streamErr) {
+        console.warn("SSE stream failed, falling back to standard endpoint:", streamErr);
+        try {
+            await _sendFallback(payload);
+        } catch (fallbackErr) {
+            removeLoadingIndicator();
+            console.error("Fallback also failed:", fallbackErr);
+            addMessage("Sorry, there was an error processing your request. Please try again.", false);
+        }
     } finally {
         messageInput.disabled = false;
         sendButton.disabled = false;
         messageInput.focus();
     }
+}
+
+async function _sendStreaming(payload) {
+    var response = await fetch("/api/v1/chatbot/chat/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+        throw new Error("HTTP " + response.status);
+    }
+
+    var reader = response.body.getReader();
+    var decoder = new TextDecoder();
+    var buffer = "";
+    var answered = false;
+
+    while (true) {
+        var result = await reader.read();
+        if (result.done) break;
+
+        buffer += decoder.decode(result.value, { stream: true });
+
+        var parts = buffer.split("\n\n");
+        buffer = parts.pop();
+
+        for (var i = 0; i < parts.length; i++) {
+            var block = parts[i].trim();
+            if (!block) continue;
+
+            var eventType = "";
+            var dataStr = "";
+            var lines = block.split("\n");
+            for (var j = 0; j < lines.length; j++) {
+                if (lines[j].indexOf("event: ") === 0) {
+                    eventType = lines[j].substring(7);
+                } else if (lines[j].indexOf("data: ") === 0) {
+                    dataStr = lines[j].substring(6);
+                }
+            }
+
+            if (!eventType || !dataStr) continue;
+
+            try {
+                var data = JSON.parse(dataStr);
+            } catch (e) {
+                continue;
+            }
+
+            if (eventType === "status") {
+                updateLoadingStatus(data.message);
+            } else if (eventType === "answer") {
+                removeLoadingIndicator();
+                answered = true;
+                if (data.thread_id) {
+                    currentThreadId = data.thread_id;
+                }
+                addMessage(data.answer || "Sorry, I could not process your request.", false);
+            } else if (eventType === "error") {
+                removeLoadingIndicator();
+                answered = true;
+                addMessage("Error: " + (data.message || "Something went wrong."), false);
+            }
+        }
+    }
+
+    return answered;
+}
+
+async function _sendFallback(payload) {
+    updateLoadingStatus("Thinking");
+
+    var response = await fetch("/api/v1/chatbot/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+    });
+
+    removeLoadingIndicator();
+
+    if (!response.ok) {
+        throw new Error("HTTP " + response.status);
+    }
+
+    var data = await response.json();
+    if (data.thread_id) {
+        currentThreadId = data.thread_id;
+    }
+    addMessage(data.answer || "Sorry, I could not process your request.", false);
+}
+
+function startNewChat() {
+    currentThreadId = null;
+    hasMessages = false;
+    messagesContainer.innerHTML =
+        '<div class="empty-state">' +
+        '<div class="empty-state-icon">&#128269;</div>' +
+        '<div class="empty-state-text">Start a conversation</div>' +
+        '<div class="empty-state-subtext">Ask questions about your documents</div>' +
+        '</div>';
+    messageInput.value = "";
+    messageInput.style.height = "auto";
+    messageInput.focus();
 }
 
 messageInput.focus();

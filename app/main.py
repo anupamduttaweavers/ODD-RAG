@@ -15,6 +15,9 @@ from app.admin.router import router as admin_api_router
 from app.admin.runtime_config import seed_runtime_settings
 from app.admin.service import seed_superadmin
 from app.api.v1.router import api_router
+from app.chatbot.agent.memory import init_memory_store, shutdown_memory_store
+from app.chatbot.agent.rag import shutdown_checkpointer
+from app.chatbot.exceptions import ChatbotError, LLMConnectionError
 from app.core.config import settings
 from app.core.hash_database import init_hash_db
 from app.core.logging import logger
@@ -95,9 +98,25 @@ async def lifespan(app: FastAPI):
     logger.info("Registering file-source auto-scan job...")
     register_filesource_scan_job()
 
+    # Initialize long-term memory store (LangMem)
+    logger.info("Initializing long-term memory store...")
+    try:
+        await init_memory_store()
+        logger.info("Long-term memory store ready.")
+    except Exception as exc:
+        logger.warning("Long-term memory store init failed (non-fatal): %s", exc)
+
     yield
     # Shutdown
     logger.info("Shutting down...")
+
+    # Persist and close long-term memory store
+    logger.info("Persisting long-term memory store...")
+    await shutdown_memory_store()
+
+    # Close the conversation checkpointer connection
+    logger.info("Closing conversation checkpointer...")
+    await shutdown_checkpointer()
 
     # Stop the background scheduler (stops all jobs including file-source scan)
     stop_scheduler()
@@ -234,6 +253,23 @@ async def custom_validation_exception_handler(request: Request, exc: RequestVali
             content=_json.loads(_json.dumps({"detail": exc.errors()}, default=_safe)),
         )
     return _render_error_page(422, request)
+
+
+@app.exception_handler(ChatbotError)
+async def chatbot_error_handler(request: Request, exc: ChatbotError):
+    """Map chatbot/RAG errors to structured JSON responses."""
+    logger.error("ChatbotError on %s: [%s] %s", request.url.path, exc.error_code, exc.message)
+    status_code = 502 if isinstance(exc, LLMConnectionError) else 500
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "detail": {
+                "message": exc.message,
+                "error_code": exc.error_code,
+            }
+        },
+    )
 
 
 @app.exception_handler(Exception)
