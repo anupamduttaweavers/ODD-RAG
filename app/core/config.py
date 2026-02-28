@@ -26,7 +26,10 @@ class Settings(BaseSettings):
     VECTORSTORE_PATH: Path = BASE_DIR / "vectorstore_index"
 
     # File Upload
-    ALLOWED_EXTENSIONS: Set[str] = {".txt", ".pdf"}
+    ALLOWED_EXTENSIONS: Set[str] = {
+        ".txt", ".pdf", ".docx", ".xlsx", ".csv",
+        ".pptx", ".html", ".htm", ".md",
+    }
 
     # Application
     APP_NAME: str = "Semantic Document Discovery"

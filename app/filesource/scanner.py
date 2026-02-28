@@ -18,6 +18,7 @@ runs on the same interval as the BASE_DATA_FOLDER sync.
 import hashlib
 import logging
 import os
+import asyncio
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -26,6 +27,7 @@ from typing import Any, Dict, List, Optional, Set
 from apscheduler.triggers.interval import IntervalTrigger
 from sqlmodel import select
 
+from app.core.config import settings
 from app.filesource import crypto
 from app.filesource.adapters.registry import create_adapter
 from app.filesource.database import get_session as get_fs_session
@@ -33,7 +35,7 @@ from app.filesource.models import DEFAULT_PORTS, FileSourceConfig, FilesourcePro
 
 logger = logging.getLogger("app.filesource")
 
-_ALLOWED_EXT: Set[str] = {".pdf", ".txt"}
+_ALLOWED_EXT: Set[str] = {ext.lower() for ext in settings.ALLOWED_EXTENSIONS}
 FILESOURCE_JOB_ID = "filesource-auto-scan"
 
 
@@ -157,7 +159,11 @@ async def _scan_local_path(src: FileSourceConfig) -> Dict[str, Any]:
                     skipped += 1
                     continue
 
-                doc_info, chunks = process_file(file_path=fpath, folder_name=folder_name)
+                doc_info, chunks = await asyncio.to_thread(
+                    process_file,
+                    file_path=fpath,
+                    folder_name=folder_name,
+                )
                 if chunks:
                     await add_documents(chunks)
                     chunks_added += len(chunks)
@@ -227,8 +233,10 @@ async def _scan_remote_via_temp(src: FileSourceConfig) -> Dict[str, Any]:
                             skipped += 1
                             continue
 
-                        doc_info, chunks = process_file(
-                            file_path=local_tmp, folder_name=src.name
+                        doc_info, chunks = await asyncio.to_thread(
+                            process_file,
+                            file_path=local_tmp,
+                            folder_name=src.name,
                         )
                         if chunks:
                             await add_documents(chunks)

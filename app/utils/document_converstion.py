@@ -1,16 +1,33 @@
 #This file contains all the utility functions for document conversion.
-"""Document conversion and splitting utilities with metadata preservation."""
+"""Document conversion and splitting utilities with metadata preservation.
 
+Supported formats:
+    .pdf   — PyPDFLoader with per-page RapidOCR fallback for scanned pages
+    .txt   — Custom line-batched reader
+    .md    — Treated as plain text (reuses .txt loader)
+    .docx  — Docx2txtLoader (LangChain)
+    .xlsx  — openpyxl direct (one page per sheet)
+    .csv   — CSVLoader (LangChain) with row-batching
+    .pptx  — UnstructuredPowerPointLoader (LangChain)
+    .html  — BSHTMLLoader (LangChain)
+    .htm   — Alias for .html
+"""
+
+import csv
 import hashlib
-from pathlib import Path
+import logging
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
+
+from langchain_community.document_loaders import PyPDFLoader
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import PyPDFLoader
 
-from app.schemas.document import PageInfo, DocumentInfo
 from app.core.config import settings
+from app.schemas.document import DocumentInfo, PageInfo
+
+logger = logging.getLogger(__name__)
 
 # Configuration
 DEFAULT_CHUNK_SIZE = settings.DEFAULT_CHUNK_SIZE
@@ -36,30 +53,93 @@ def get_file_info(file_path: str, folder_name: Optional[str] = None) -> dict:
     }
 
 
+def _ocr_page_image(page_image) -> str:
+    """Run RapidOCR on a single page image. Returns extracted text or empty string."""
+    try:
+        from rapidocr_onnxruntime import RapidOCR
+        import numpy as np
+
+        ocr = RapidOCR()
+        if not isinstance(page_image, np.ndarray):
+            page_image = np.array(page_image)
+        result, _ = ocr(page_image)
+        if result:
+            return "\n".join(line[1] for line in result)
+    except ImportError:
+        logger.debug("rapidocr-onnxruntime not installed — OCR unavailable")
+    except Exception as exc:
+        logger.warning("RapidOCR failed on page image: %s", exc)
+    return ""
+
+
 def load_pdf_with_pages(file_path: str) -> list[Document]:
-    """
-    Load PDF file preserving page numbers in metadata.
-    
-    Each page becomes a separate Document with metadata:
-    - page: page number (0-indexed from PyPDFLoader)
-    - source: file path
-    
-    Args:
-        file_path: Path to the PDF file
-        
-    Returns:
-        List of Document objects, one per page
+    """Load PDF file preserving page numbers in metadata.
+
+    For truly scanned pages (text is empty/whitespace AND page contains
+    embedded images), falls back to RapidOCR.  Pages with short but real
+    digital text (e.g. cover pages, section dividers) are left as-is.
+    If RapidOCR is not installed, the original PyPDF output is kept.
+
+    When a scanned page has multiple images, text from ALL images is
+    concatenated (e.g. a page scanned as strips or multi-column layout).
     """
     loader = PyPDFLoader(file_path)
     pages = loader.load()
-    
-    # Convert 0-indexed page to 1-indexed and add total_pages
+
+    if not pages:
+        logger.warning("PDF has 0 extractable pages: %s", file_path)
+        return [Document(
+            page_content="",
+            metadata={"page_number": 1, "total_pages": 1, "source": file_path},
+        )]
+
     total_pages = len(pages)
+    ocr_attempted = False
+    _reader = None
+
     for i, page in enumerate(pages):
-        page.metadata["page_number"] = i + 1  # 1-indexed
+        page.metadata["page_number"] = i + 1
         page.metadata["total_pages"] = total_pages
         page.metadata["source"] = file_path
-    
+
+        if page.page_content.strip():
+            continue
+
+        try:
+            import pypdf
+
+            if _reader is None:
+                _reader = pypdf.PdfReader(file_path)
+
+            if i >= len(_reader.pages):
+                continue
+
+            pdf_page = _reader.pages[i]
+            page_images = pdf_page.images
+            if not page_images:
+                continue
+
+            from PIL import Image
+            import io
+
+            ocr_parts: list[str] = []
+            for img_obj in page_images:
+                try:
+                    img = Image.open(io.BytesIO(img_obj.data)).convert("RGB")
+                    ocr_text = _ocr_page_image(img)
+                    if ocr_text.strip():
+                        ocr_parts.append(ocr_text.strip())
+                except Exception as img_exc:
+                    logger.debug("Skipping unreadable image on page %d: %s", i + 1, img_exc)
+
+            if ocr_parts:
+                page.page_content = "\n\n".join(ocr_parts)
+                if not ocr_attempted:
+                    logger.info("Using RapidOCR for scanned pages in %s", file_path)
+                    ocr_attempted = True
+        except Exception as exc:
+            logger.debug("OCR fallback skipped for page %d: %s", i + 1, exc)
+
     return pages
 
 
@@ -118,6 +198,242 @@ def load_text_with_pages(
         ))
     
     return pages
+
+
+# ---------------------------------------------------------------------------
+# New format loaders (all return list[Document] with page_number metadata)
+# ---------------------------------------------------------------------------
+
+
+def load_docx_with_pages(file_path: str) -> list[Document]:
+    """Load a .docx file using LangChain Docx2txtLoader.
+
+    Returns the full document as a single page. If docx2txt is not
+    installed the function raises a clear error.
+    """
+    try:
+        from langchain_community.document_loaders import Docx2txtLoader
+    except ImportError as exc:
+        raise ImportError(
+            "docx2txt is required to process .docx files. "
+            "Install it with: pip install docx2txt"
+        ) from exc
+
+    loader = Docx2txtLoader(file_path)
+    docs = loader.load()
+    text = "\n".join(d.page_content for d in docs) if docs else ""
+
+    return [Document(
+        page_content=text,
+        metadata={"page_number": 1, "total_pages": 1, "source": file_path},
+    )]
+
+
+def load_xlsx_with_pages(file_path: str) -> list[Document]:
+    """Load an .xlsx workbook — one Document per sheet.
+
+    Each row is serialised as ``Col1: val1 | Col2: val2 | …`` so the
+    content is meaningful for vector search.
+    """
+    try:
+        import openpyxl
+    except ImportError as exc:
+        raise ImportError(
+            "openpyxl is required to process .xlsx files. "
+            "Install it with: pip install openpyxl"
+        ) from exc
+
+    wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+    pages: list[Document] = []
+    total_sheets = len(wb.sheetnames)
+
+    for idx, sheet_name in enumerate(wb.sheetnames):
+        ws = wb[sheet_name]
+        rows_iter = ws.iter_rows(values_only=True)
+        try:
+            first_row = next(rows_iter)
+        except StopIteration:
+            continue
+
+        headers = [str(h) if h is not None else f"col_{i}" for i, h in enumerate(first_row)]
+        lines: list[str] = []
+        for row in rows_iter:
+            parts = [
+                f"{headers[j]}: {cell}" for j, cell in enumerate(row)
+                if cell is not None
+            ]
+            if parts:
+                lines.append(" | ".join(parts))
+
+        content = f"Sheet: {sheet_name}\n" + "\n".join(lines)
+        pages.append(Document(
+            page_content=content,
+            metadata={
+                "page_number": idx + 1,
+                "total_pages": total_sheets,
+                "sheet_name": sheet_name,
+                "source": file_path,
+            },
+        ))
+
+    wb.close()
+
+    if not pages:
+        return [Document(
+            page_content="",
+            metadata={"page_number": 1, "total_pages": 1, "source": file_path},
+        )]
+
+    return pages
+
+
+def load_csv_with_pages(
+    file_path: str,
+    rows_per_page: int = 50,
+) -> list[Document]:
+    """Load a .csv file — batches of rows become synthetic pages.
+
+    Uses the stdlib ``csv`` module for maximum compatibility.
+    """
+    with open(file_path, "r", encoding="utf-8", errors="replace", newline="") as fh:
+        reader = csv.reader(fh)
+        header_row = next(reader, None)
+        if header_row is None:
+            return [Document(
+                page_content="",
+                metadata={"page_number": 1, "total_pages": 1, "source": file_path},
+            )]
+        data_row_count = sum(1 for _ in reader)
+
+    if data_row_count == 0:
+        return [Document(
+            page_content="",
+            metadata={"page_number": 1, "total_pages": 1, "source": file_path},
+        )]
+
+    headers = header_row
+    total_pages = max(1, (data_row_count + rows_per_page - 1) // rows_per_page)
+
+    pages: list[Document] = []
+    with open(file_path, "r", encoding="utf-8", errors="replace", newline="") as fh:
+        reader = csv.reader(fh)
+        next(reader, None)  # Skip header row
+        lines: list[str] = []
+        page_idx = 0
+        for row_idx, row in enumerate(reader, start=1):
+            parts = [
+                f"{headers[j]}: {cell}" for j, cell in enumerate(row)
+                if j < len(headers) and cell
+            ]
+            if parts:
+                lines.append(" | ".join(parts))
+
+            if row_idx % rows_per_page == 0:
+                pages.append(Document(
+                    page_content="\n".join(lines),
+                    metadata={
+                        "page_number": page_idx + 1,
+                        "total_pages": total_pages,
+                        "source": file_path,
+                    },
+                ))
+                page_idx += 1
+                lines = []
+
+        if lines:
+            pages.append(Document(
+                page_content="\n".join(lines),
+                metadata={
+                    "page_number": page_idx + 1,
+                    "total_pages": total_pages,
+                    "source": file_path,
+                },
+            ))
+
+    if not pages:
+        pages.append(Document(
+            page_content="",
+            metadata={"page_number": 1, "total_pages": 1, "source": file_path},
+        ))
+
+    return pages
+
+
+def load_pptx_with_pages(file_path: str) -> list[Document]:
+    """Load a .pptx file — one Document per slide.
+
+    Uses python-pptx directly for slide-level control without requiring
+    the heavy ``unstructured`` library.
+    """
+    try:
+        from pptx import Presentation
+    except ImportError as exc:
+        raise ImportError(
+            "python-pptx is required to process .pptx files. "
+            "Install it with: pip install python-pptx"
+        ) from exc
+
+    prs = Presentation(file_path)
+    pages: list[Document] = []
+    total_slides = len(prs.slides)
+
+    for idx, slide in enumerate(prs.slides):
+        text_parts: list[str] = []
+        for shape in slide.shapes:
+            if shape.has_text_frame:
+                for paragraph in shape.text_frame.paragraphs:
+                    line = paragraph.text.strip()
+                    if line:
+                        text_parts.append(line)
+
+        pages.append(Document(
+            page_content="\n".join(text_parts),
+            metadata={
+                "page_number": idx + 1,
+                "total_pages": total_slides,
+                "slide_number": idx + 1,
+                "source": file_path,
+            },
+        ))
+
+    if not pages:
+        return [Document(
+            page_content="",
+            metadata={"page_number": 1, "total_pages": 1, "source": file_path},
+        )]
+
+    return pages
+
+
+def load_html_with_pages(file_path: str) -> list[Document]:
+    """Load an .html file using BeautifulSoup.
+
+    Returns the stripped text as a single page with the ``<title>``
+    preserved in metadata.
+    """
+    try:
+        from bs4 import BeautifulSoup
+    except ImportError as exc:
+        raise ImportError(
+            "beautifulsoup4 is required to process .html files. "
+            "Install it with: pip install beautifulsoup4"
+        ) from exc
+
+    with open(file_path, "r", encoding="utf-8", errors="replace") as fh:
+        soup = BeautifulSoup(fh, "lxml")
+
+    title = soup.title.string.strip() if soup.title and soup.title.string else ""
+    text = soup.get_text(separator="\n", strip=True)
+
+    return [Document(
+        page_content=text,
+        metadata={
+            "page_number": 1,
+            "total_pages": 1,
+            "title": title,
+            "source": file_path,
+        },
+    )]
 
 
 def split_document(
@@ -235,10 +551,11 @@ def process_file(
     lines_per_page: int = DEFAULT_LINES_PER_PAGE
 ) -> tuple[DocumentInfo, list[Document]]:
     """
-    Process a file (PDF or text) into chunks with full metadata.
+    Process a file into chunks with full metadata.
     
     Main entry point for document processing. Automatically detects file type,
-    loads with appropriate loader, splits into chunks, and enriches with metadata.
+    loads with the appropriate loader, splits into chunks, and enriches with
+    metadata.  Supports: pdf, txt, md, docx, xlsx, csv, pptx, html, htm.
     
     Args:
         file_path: Path to the file to process
@@ -263,12 +580,31 @@ def process_file(
     file_info = get_file_info(file_path, folder_name)
     
     # Load file based on type
-    if file_type == "pdf":
-        pages = load_pdf_with_pages(file_path)
-    elif file_type in ("txt", "text"):
-        pages = load_text_with_pages(file_path, lines_per_page)
-    else:
-        raise ValueError(f"Unsupported file type: {file_type}. Supported: pdf, txt")
+    _LOADER_MAP = {
+        "pdf": lambda fp: load_pdf_with_pages(fp),
+        "txt": lambda fp: load_text_with_pages(fp, lines_per_page),
+        "text": lambda fp: load_text_with_pages(fp, lines_per_page),
+        "md": lambda fp: load_text_with_pages(fp, lines_per_page),
+        "docx": lambda fp: load_docx_with_pages(fp),
+        "xlsx": lambda fp: load_xlsx_with_pages(fp),
+        "csv": lambda fp: load_csv_with_pages(fp),
+        "pptx": lambda fp: load_pptx_with_pages(fp),
+        "html": lambda fp: load_html_with_pages(fp),
+        "htm": lambda fp: load_html_with_pages(fp),
+    }
+
+    loader_fn = _LOADER_MAP.get(file_type)
+    if loader_fn is None:
+        supported = ", ".join(sorted(_LOADER_MAP.keys()))
+        raise ValueError(f"Unsupported file type: {file_type}. Supported: {supported}")
+
+    try:
+        pages = loader_fn(file_path)
+    except ImportError as exc:
+        raise ValueError(
+            f"Missing dependency for .{file_type} files: {exc}. "
+            f"Check requirements.txt for the required package."
+        ) from exc
     
     # Calculate document hash from all page content
     all_content = "".join(page.page_content for page in pages)

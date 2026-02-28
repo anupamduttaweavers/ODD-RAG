@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional, Set
 
 from sqlmodel import select
 
+from app.core.config import settings
 from app.filesource import crypto
 from app.filesource.adapters.registry import create_adapter
 from app.filesource.database import get_session
@@ -23,7 +24,7 @@ from app.filesource.models import DEFAULT_PORTS, FileSourceConfig
 logger = logging.getLogger("app.filesource")
 
 IST = timezone(timedelta(hours=5, minutes=30))
-_ALLOWED_EXTENSIONS: Set[str] = {".pdf", ".txt"}
+_ALLOWED_EXTENSIONS: Set[str] = {ext.lower() for ext in settings.ALLOWED_EXTENSIONS}
 _MIN_TEST_INTERVAL = 5
 _last_test_ts: Dict[int, float] = {}
 

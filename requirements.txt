@@ -47,6 +47,14 @@ pypdf
 langchain-text-splitters
 langmem
 
+# Multi-format document loaders
+docx2txt
+openpyxl
+python-pptx
+beautifulsoup4
+lxml
+rapidocr-onnxruntime
+
 # Task scheduling
 apscheduler
 

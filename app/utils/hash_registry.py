@@ -1,11 +1,13 @@
 """Hash registry operations for file deduplication."""
 
+import asyncio
 import hashlib
 from pathlib import Path
 from typing import Optional
 
 from sqlmodel import select
 
+from app.core.config import settings
 from app.core.hash_database import get_session
 from app.models.hash_registry import FileHashRegistry, HashLookupResult
 
@@ -372,7 +374,7 @@ def sync_registry_with_folder(folder_path: Path, folder_name: str) -> int:
         return 0
     
     for file_path in folder_path.iterdir():
-        if file_path.is_file() and file_path.suffix.lower() in ('.pdf', '.txt'):
+        if file_path.is_file() and file_path.suffix.lower() in settings.ALLOWED_EXTENSIONS:
             content_hash = calculate_hash_from_file(str(file_path))
             
             # Check if already registered
@@ -470,9 +472,10 @@ async def load_all_files_to_vectorstore(base_folder: Path) -> dict[str, dict]:
         if not is_processed:
             continue  # Skip unprocessed files here
         try:
-            doc_info, chunks = process_file(
+            doc_info, chunks = await asyncio.to_thread(
+                process_file,
                 file_path=file_path,
-                folder_name=folder_name
+                folder_name=folder_name,
             )
             if chunks:
                 await add_documents(chunks)
@@ -524,7 +527,7 @@ async def sync_data_folder_changes(base_folder: Path) -> dict:
     """
     import os
     from app.utils.document_converstion import process_file
-    from app.vectorstore.operations import add_documents, delete_documents_by_file_path, delete_documents_by_file_name
+    from app.vectorstore.operations import add_documents, delete_documents_by_file_path
     
     results = {
         "new_files_added": 0,
@@ -548,7 +551,7 @@ async def sync_data_folder_changes(base_folder: Path) -> dict:
     
     for root, dirs, files in os.walk(base_folder):
         for file in files:
-            if not file.endswith(tuple(['.pdf', '.txt'])):
+            if Path(file).suffix.lower() not in settings.ALLOWED_EXTENSIONS:
                 continue
             
             file_path = Path(root) / file
@@ -590,9 +593,10 @@ async def sync_data_folder_changes(base_folder: Path) -> dict:
                 )
                 
                 # Process the file and add to vectorstore
-                doc_info, chunks = process_file(
+                doc_info, chunks = await asyncio.to_thread(
+                    process_file,
                     file_path=file_path_str,
-                    folder_name=folder_name
+                    folder_name=folder_name,
                 )
                 
                 if chunks:
@@ -619,8 +623,8 @@ async def sync_data_folder_changes(base_folder: Path) -> dict:
     for registered_path, record in registered_paths.items():
         if registered_path not in current_files:
             try:
-                # File was deleted - remove from vectorstore
-                chunks_deleted = delete_documents_by_file_name(registered_path.split('/')[-1])
+                # File was deleted - remove by canonical file path (OS-safe).
+                chunks_deleted = delete_documents_by_file_path(registered_path)
                 results["chunks_removed"] += chunks_deleted
                 
                 # Remove from hash registry
@@ -648,9 +652,10 @@ async def sync_data_folder_changes(base_folder: Path) -> dict:
         
         try:
             # File exists but not processed, process it now
-            doc_info, chunks = process_file(
+            doc_info, chunks = await asyncio.to_thread(
+                process_file,
                 file_path=unprocessed_record.file_path,
-                folder_name=unprocessed_record.folder_name
+                folder_name=unprocessed_record.folder_name,
             )
             
             if chunks:

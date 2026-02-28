@@ -1,3 +1,6 @@
+import asyncio
+import logging
+
 from fastapi import APIRouter, UploadFile, File
 from fastapi.responses import JSONResponse
 from typing import Optional
@@ -12,9 +15,11 @@ from app.utils.hash_registry import (
 )
 from app.utils.document_converstion import process_file
 from app.vectorstore.operations import add_documents
+from app.vectorstore.vectorstore import save_vectorstore, vector_store
 
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("/all_files_in_hash_registry/")
@@ -150,13 +155,29 @@ async def create_upload_file(
         if auto_process:
             try:
                 # Process file into chunks with metadata
-                doc_info, chunks = process_file(
-                    file_path=str(file_path), folder_name=folder_name
+                # Offload sync parsing/chunking to worker thread to avoid blocking event loop.
+                doc_info, chunks = await asyncio.to_thread(
+                    process_file,
+                    file_path=str(file_path),
+                    folder_name=folder_name,
                 )
 
                 # Add chunks to vectorstore
                 if chunks:
                     await add_documents(chunks)
+                    # Persist immediately to reduce data loss window on crash/restart.
+                    try:
+                        await asyncio.to_thread(save_vectorstore, vector_store)
+                    except Exception as persist_error:
+                        logger.warning(
+                            "Vectorstore persistence failed after upload '%s': %s",
+                            file.filename,
+                            persist_error,
+                        )
+                        result["persistence_warning"] = (
+                            "Indexed in memory, but immediate disk persistence failed. "
+                            "Data will be retried on normal shutdown."
+                        )
 
                 # Update processing status in registry
                 update_processing_status(
