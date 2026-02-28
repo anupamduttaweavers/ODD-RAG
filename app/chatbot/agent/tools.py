@@ -10,6 +10,9 @@ from app.vectorstore.vectorstore import vector_store
 
 logger = logging.getLogger(__name__)
 
+_DEFAULT_K = 10
+_DEFAULT_MIN_SCORE = 0.15
+
 
 @tool
 def retrieve_documents(query: str) -> str:
@@ -18,21 +21,33 @@ def retrieve_documents(query: str) -> str:
     Use this tool whenever the user asks a question that may be answered by
     the uploaded documents.  Pass a concise, keyword-rich search query.
     """
-    k = rc.get_int("rag_retrieval_k", 20)
+    k = rc.get_int("rag_retrieval_k", _DEFAULT_K)
+    min_score = _DEFAULT_MIN_SCORE
     try:
-        results = vector_store.similarity_search_with_score(query, k=k)
+        raw_results = vector_store.similarity_search_with_score(query, k=k)
     except Exception as exc:
         logger.error("Vector-store retrieval failed: %s", exc, exc_info=True)
         raise RetrievalError(f"Vector-store retrieval failed: {exc}") from exc
 
-    if not results:
+    if not raw_results:
         return "No relevant documents found in the knowledge base."
 
-    docs = [doc for doc, _score in results]
-    logger.info("Retrieved %d documents (k=%d) for query: %s", len(docs), k, query)
+    results = [(doc, score) for doc, score in raw_results if score >= min_score]
+
+    if not results:
+        logger.info(
+            "All %d results below score threshold %.2f for query: %s",
+            len(raw_results), min_score, query,
+        )
+        return "No relevant documents found in the knowledge base."
+
+    logger.info(
+        "Retrieved %d documents (k=%d, min_score=%.2f, raw=%d) for query: %s",
+        len(results), k, min_score, len(raw_results), query,
+    )
 
     parts: list[str] = []
-    for i, doc in enumerate(docs, 1):
+    for i, (doc, score) in enumerate(results, 1):
         meta = doc.metadata or {}
         parts.append(
             f"[Doc {i}]\n"

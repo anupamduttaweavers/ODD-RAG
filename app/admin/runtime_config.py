@@ -44,7 +44,7 @@ _DEFAULTS: List[dict] = [
     # ── RAG / Retrieval ──
     {
         "key": "rag_retrieval_k",
-        "value": "20",
+        "value": "10",
         "category": "retrieval",
         "label": "RAG Retrieval Count (k)",
         "description": "Number of document chunks retrieved for answer generation",

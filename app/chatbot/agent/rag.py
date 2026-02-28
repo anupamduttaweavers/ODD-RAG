@@ -34,6 +34,7 @@ retains long-term context without an ever-growing message list.
 
 import logging
 import operator
+import re
 from typing import Annotated, Literal
 
 import aiosqlite
@@ -267,6 +268,10 @@ async def grade_documents(
 ) -> Literal["generate_answer", "rewrite_question"]:
     """Assess whether retrieved documents are relevant.
 
+    Uses a fast entity-match shortcut before falling back to the LLM
+    grader.  This makes relevance detection model-agnostic and avoids
+    false negatives when small LLMs are confused by large context.
+
     Returns the name of the next node to route to.
     Falls open (-> generate_answer) if grading itself fails.
     """
@@ -283,6 +288,10 @@ async def grade_documents(
         logger.info("Empty retrieval – max retries reached, generating best-effort answer")
         return "generate_answer"
 
+    if _entity_match(question, context):
+        logger.info("Documents pass entity-match shortcut – skipping LLM grading")
+        return "generate_answer"
+
     grade_prompt = get_prompt("grade_documents")
     combined = (
         f"{grade_prompt}\n\n"
@@ -292,7 +301,7 @@ async def grade_documents(
 
     try:
         response = await model.ainvoke([HumanMessage(content=combined)])
-        score = response.content.strip().lower()
+        score = _content_to_str(response.content).strip().lower()
     except Exception as exc:
         logger.warning("Document grading failed (%s) – defaulting to relevant", exc)
         return "generate_answer"
@@ -453,3 +462,45 @@ def _extract_tool_response(messages: list) -> str:
         if isinstance(msg, ToolMessage):
             return _content_to_str(msg.content)
     return ""
+
+
+_STOP_WORDS = frozenset({
+    "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
+    "have", "has", "had", "do", "does", "did", "will", "would", "shall",
+    "should", "may", "might", "must", "can", "could", "i", "me", "my",
+    "you", "your", "he", "she", "it", "we", "they", "this", "that",
+    "of", "in", "to", "for", "with", "on", "at", "from", "by", "about",
+    "as", "into", "through", "and", "or", "not", "no", "but", "if",
+    "all", "any", "some", "what", "which", "who", "whom", "how", "when",
+    "where", "please", "provide", "check", "need", "want", "give",
+    "information", "details", "tell", "show", "find", "get",
+})
+
+
+def _entity_match(question: str, context: str, min_hits: int = 2) -> bool:
+    """Check if key terms from the question appear in the retrieved context.
+
+    Extracts significant words (non-stopword, 3+ chars) from the question
+    and checks how many appear in the context.  If at least ``min_hits``
+    significant terms match, the context is considered relevant.
+
+    This is a lightweight, model-agnostic heuristic that prevents the LLM
+    grader from incorrectly rejecting obviously relevant documents.
+    """
+    try:
+        tokens = re.findall(r"[A-Za-z0-9]+", question.lower())
+        significant = [t for t in tokens if t not in _STOP_WORDS and len(t) >= 3]
+        if not significant:
+            return False
+        context_lower = context.lower()
+        hits = sum(1 for t in significant if t in context_lower)
+        ratio = hits / len(significant) if significant else 0
+        matched = hits >= min_hits and ratio >= 0.3
+        if matched:
+            logger.debug(
+                "Entity match: %d/%d significant terms found (ratio=%.2f)",
+                hits, len(significant), ratio,
+            )
+        return matched
+    except Exception:
+        return False

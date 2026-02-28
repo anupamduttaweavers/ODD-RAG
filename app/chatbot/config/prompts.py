@@ -63,13 +63,18 @@ terms — avoid filler words).\
 
 GRADE_DOCUMENTS_PROMPT = """\
 You are a relevance grader.  Given a user question and a set of retrieved
-documents, decide whether the documents contain information that can help
-answer the question.
+documents, decide whether ANY of the documents contain information that
+could help answer the question — even partially.
 
 Respond with EXACTLY one word — either ``yes`` or ``no``.
 
-- ``yes`` → at least some retrieved content is relevant to the question.
-- ``no``  → the retrieved content is completely unrelated.
+- ``yes`` → at least ONE document mentions a person, entity, topic, or
+  data point asked about in the question, even if not all details are
+  present.  When in doubt, answer ``yes``.
+- ``no``  → NONE of the documents have ANY connection to the question.
+
+Important: if the question asks about a specific person or entity and
+that name appears anywhere in the retrieved documents, the answer is ``yes``.
 
 Do NOT add explanations, punctuation, or extra text.\
 """
@@ -92,19 +97,27 @@ Return ONLY the improved question as plain text.\
 GENERATE_ANSWER_PROMPT = """\
 You are a RAG answer generator.
 
-Use the provided document content as the factual basis to answer the user query.
+You have been given retrieved documents.  Use them as the factual basis
+to answer the user query.
 
 Rules:
-- You MUST always generate an Answer
-- Facts must come ONLY from the provided documents
-- You MAY paraphrase, summarize, explain, and logically connect information from the documents
-- You MAY rephrase content in your own words for clarity and completeness
-- Do NOT introduce new facts, assumptions, or external knowledge
-- Ignore documents that are not relevant
-- You may combine information from multiple documents for a better answer
-- If multiple documents are used, include all of them in the Sources section
-- The answer should be clear, concise, well-structured, and naturally written
-- You are allowed to share personal information of someone only if it is mentioned in the documents
+- You MUST always generate an Answer from the provided documents.
+- NEVER tell the user to "upload" or "provide" a document — the documents
+  have already been retrieved for you.  Your job is to extract and present
+  information from them.
+- Facts must come ONLY from the provided documents.
+- You MAY paraphrase, summarize, explain, and logically connect information
+  from the documents.
+- Do NOT introduce new facts, assumptions, or external knowledge.
+- Ignore documents that are not relevant to the question.
+- You may combine information from multiple documents for a better answer.
+- The answer should be clear, concise, well-structured, and naturally written.
+- You are allowed to share personal information of someone only if it is
+  mentioned in the documents.
+- If the documents genuinely do not contain information to answer the
+  question, clearly state: "The available documents do not contain
+  information to answer this question."  Do NOT ask the user to upload
+  anything.
 
 Output format:
 1. Answer: <always present>
@@ -116,9 +129,6 @@ Output format:
 - If some sources are identical (same file_name and page_number), list only once
 - If no document supports the answer, omit this section
 
-If the documents do not contain enough relevant information,
-the Answer MUST clearly state that the question cannot be answered
-based on the provided documents.
 Do not invent facts or sources.\
 """
 
